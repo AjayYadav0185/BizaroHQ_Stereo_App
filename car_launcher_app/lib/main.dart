@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -70,6 +71,11 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
 
   // Bluetooth media device connection state
   bool _btConnected = false;
+  String _nowPlayingTitle = '';
+  String _nowPlayingArtist = '';
+
+  // Current compass heading (degrees, 0 = north) used to rotate the map.
+  double _heading = 0.0;
 
   // Global key to access map state
   final GlobalKey<_CarMapState> _mapKey = GlobalKey<_CarMapState>();
@@ -89,16 +95,30 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     _startLocation();
   }
 
-  /// Poll Bluetooth A2DP connection state so the media card reflects the
-  /// connected device in real time.
+  /// Poll Bluetooth A2DP connection + now-playing metadata so the media card
+  /// reflects the connected device and current track in real time.
   Future<void> _startBluetoothMonitoring() async {
+    await MediaChannel.requestBluetoothPermission();
     await _refreshBluetooth();
+    await _refreshNowPlaying();
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 3));
       if (!mounted) return false;
       await _refreshBluetooth();
+      await _refreshNowPlaying();
       return true;
     });
+  }
+
+  Future<void> _refreshNowPlaying() async {
+    final track = await MediaChannel.getNowPlaying();
+    if (mounted &&
+        (track.title != _nowPlayingTitle || track.artist != _nowPlayingArtist)) {
+      setState(() {
+        _nowPlayingTitle = track.title;
+        _nowPlayingArtist = track.artist;
+      });
+    }
   }
 
   Future<void> _refreshBluetooth() async {
@@ -134,14 +154,20 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
         ),
       ).listen((pos) {
         final kmh = (pos.speed.isFinite && pos.speed >= 0) ? pos.speed * 3.6 : 0.0;
+        final h = (pos.heading.isFinite && pos.heading >= 0) ? pos.heading : _heading;
         setState(() {
           _speedKmh = kmh;
           _mapCenter = latlong.LatLng(pos.latitude, pos.longitude);
           _locationReady = true;
+          _heading = h;
         });
-        // Auto-center map only if toggle is enabled
+        // Keep the map oriented to the direction of travel.
+        _mapKey.currentState?.setRotation(h);
+        // Auto-center map only if toggle is enabled. Pass the fresh position
+        // directly because the child widget's `widget.center` has not been
+        // rebuilt with the new value yet within this same frame.
         if (_autoCenterMap && mounted) {
-          _mapKey.currentState?.centerOnLocation();
+          _mapKey.currentState?.centerOnLocation(_mapCenter);
         }
       }, onError: (_) {});
     } catch (_) {}
@@ -248,6 +274,8 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                             tint: const Color(0xFF4CC3FF),
                             child: _PremiumMediaCard(
                               isBluetoothConnected: _btConnected,
+                              nowPlayingTitle: _nowPlayingTitle,
+                              nowPlayingArtist: _nowPlayingArtist,
                               onPrevious: MediaChannel.previous,
                               onToggle: MediaChannel.playPauseToggle,
                               onNext: MediaChannel.next,
@@ -284,6 +312,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                         child: _CarMap(
                             key: _mapKey,
                             center: _mapCenter,
+                            heading: _heading,
                             locationReady: _locationReady,
                             destination: _destination,
                             routePoints: _routePoints,
@@ -364,14 +393,12 @@ class _GlassContainer extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double borderRadius;
-  final double blur;
   final Color tint;
 
   const _GlassContainer({
     required this.child,
     this.padding = const EdgeInsets.all(16),
     this.borderRadius = 20,
-    this.blur = 18,
     this.tint = const Color(0xFF4CC3FF),
   });
 
@@ -380,7 +407,7 @@ class _GlassContainer extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
@@ -663,7 +690,6 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
                 );
               },
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(18.5),
                 child: ModelViewer(
                   src: 'assets/models/car.glb',
                   alt: 'Rotating 3D Car Model',
@@ -716,9 +742,110 @@ class _PremiumSpeedometer extends StatelessWidget {
   }
 }
 
+/// Scrolling "now playing" marquee that moves text from right to left when it
+/// overflows the available width.
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _MarqueeText({
+    required this.text,
+    required this.style,
+  });
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText>
+    with SingleTickerProviderStateMixin {
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _textKey = GlobalKey();
+  late final AnimationController _animController;
+  double _viewWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..addListener(() {
+        if (_scrollController.hasClients) {
+          final max = _scrollController.position.maxScrollExtent;
+          if (max > 0) {
+            _scrollController.jumpTo(_animController.value * max);
+          }
+        }
+      });
+    // Measure after first layout, then start if needed.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _evaluate());
+  }
+
+  void _evaluate() {
+    if (!mounted) return;
+    final ctx = _textKey.currentContext;
+    if (ctx != null) {
+      final w = (ctx.findRenderObject() as RenderBox).size.width;
+      if (w > _viewWidth && !_animController.isAnimating) {
+        _animController.repeat();
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarqueeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _animController.stop();
+      _animController.reset();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _evaluate());
+    }
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 22,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _viewWidth = constraints.maxWidth;
+          return SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            child: Container(
+              constraints: BoxConstraints(minWidth: _viewWidth),
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  key: _textKey,
+                  widget.text,
+                  style: widget.style,
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// Premium media card.
 class _PremiumMediaCard extends StatelessWidget {
   final bool isBluetoothConnected;
+  final String nowPlayingTitle;
+  final String nowPlayingArtist;
   final Future<void> Function() onPrevious;
   final Future<void> Function() onToggle;
   final Future<void> Function() onNext;
@@ -727,6 +854,8 @@ class _PremiumMediaCard extends StatelessWidget {
 
   const _PremiumMediaCard({
     required this.isBluetoothConnected,
+    required this.nowPlayingTitle,
+    required this.nowPlayingArtist,
     required this.onPrevious,
     required this.onToggle,
     required this.onNext,
@@ -740,6 +869,11 @@ class _PremiumMediaCard extends StatelessWidget {
     final Color btColor = isBluetoothConnected ? const Color(0xFF4CC3FF) : const Color(0xFFFF5252);
     final String btLabel = isBluetoothConnected ? 'BT CONNECTED' : 'NO BLUETOOTH';
 
+    final bool hasTrack = nowPlayingTitle.isNotEmpty || nowPlayingArtist.isNotEmpty;
+    final String marqueeText = hasTrack
+        ? '♫ ${nowPlayingTitle.isNotEmpty ? nowPlayingTitle : 'Unknown Track'}${nowPlayingArtist.isNotEmpty ? ' — $nowPlayingArtist' : ''}'
+        : (isBluetoothConnected ? '♫ BLUETOOTH CONNECTED — NO TRACK' : 'NO BLUETOOTH DEVICE');
+
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -747,32 +881,51 @@ class _PremiumMediaCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('MEDIA CONTROLS', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 2)),
-              const Spacer(),
+              Expanded(
+                child: const Text(
+                  'MEDIA CONTROLS',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 2),
+                ),
+              ),
+              const SizedBox(width: 8),
               Icon(Icons.bluetooth, color: btColor, size: 16),
               const SizedBox(width: 6),
-              Text(
-                btLabel,
-                style: TextStyle(
-                  color: btColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
+              Flexible(
+                child: Text(
+                  btLabel,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: btColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                  ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          // Scrolling now-playing marquee under the controls
+          _MarqueeText(
+            text: marqueeText,
+            style: TextStyle(
+              color: hasTrack ? const Color(0xFFEFF6FF) : const Color(0xFF7AA6B9),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               // Left side: volume down
-              _MediaBtn(icon: Icons.volume_down_rounded, label: 'VOL -', color: primary, onPressed: onVolumeDown),
-              _MediaBtn(icon: Icons.skip_previous_rounded, label: 'PREV', color: primary, onPressed: onPrevious),
-              _MediaBtn(icon: Icons.play_arrow_rounded, label: 'PLAY', color: primary, isPrimary: true, onPressed: onToggle),
-              _MediaBtn(icon: Icons.skip_next_rounded, label: 'NEXT', color: primary, onPressed: onNext),
+              Expanded(child: _MediaBtn(icon: Icons.volume_down_rounded, label: 'VOL -', color: primary, onPressed: onVolumeDown)),
+              Expanded(child: _MediaBtn(icon: Icons.skip_previous_rounded, label: 'PREV', color: primary, onPressed: onPrevious)),
+              Expanded(child: _MediaBtn(icon: Icons.play_arrow_rounded, label: 'PLAY', color: primary, isPrimary: true, onPressed: onToggle)),
+              Expanded(child: _MediaBtn(icon: Icons.skip_next_rounded, label: 'NEXT', color: primary, onPressed: onNext)),
               // Right side: volume up
-              _MediaBtn(icon: Icons.volume_up_rounded, label: 'VOL +', color: primary, onPressed: onVolumeUp),
+              Expanded(child: _MediaBtn(icon: Icons.volume_up_rounded, label: 'VOL +', color: primary, onPressed: onVolumeUp)),
             ],
           ),
         ],
@@ -798,7 +951,6 @@ class _MediaBtn extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onPressed,
         child: Container(
-          width: 70,
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
             gradient: isPrimary ? RadialGradient(colors: [color, color.withValues(alpha: 0.3)]) : null,
@@ -953,6 +1105,7 @@ class _DestinationBanner extends StatelessWidget {
 /// Interactive map with offline awareness.
 class _CarMap extends StatefulWidget {
   final latlong.LatLng center;
+  final double heading;
   final bool locationReady;
   final latlong.LatLng? destination;
   final List<latlong.LatLng> routePoints;
@@ -962,6 +1115,7 @@ class _CarMap extends StatefulWidget {
   const _CarMap({
     super.key,
     required this.center,
+    required this.heading,
     required this.locationReady,
     this.destination,
     required this.routePoints,
@@ -984,9 +1138,22 @@ class _CarMapState extends State<_CarMap> {
 
   void zoomIn() => _mapController.move(_mapController.camera.center, _mapController.camera.zoom + 1);
   void zoomOut() => _mapController.move(_mapController.camera.center, _mapController.camera.zoom - 1);
-  void centerOnLocation() {
+  void centerOnLocation([latlong.LatLng? point]) {
     if (widget.locationReady && mounted) {
-      _mapController.move(widget.center, 16.5);
+      _mapController.move(point ?? widget.center, 16.5);
+    }
+  }
+
+  /// Rotate the map so "up" matches the current travel direction (degrees).
+  void setRotation(double degrees) {
+    if (mounted) _mapController.rotate(degrees);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CarMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.heading != widget.heading && mounted) {
+      _mapController.rotate(widget.heading);
     }
   }
 
@@ -1000,6 +1167,7 @@ class _CarMapState extends State<_CarMap> {
           options: MapOptions(
             initialCenter: widget.center,
             initialZoom: 16.5,
+            initialRotation: widget.heading * pi / 180,
             interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
             onTap: (tapPosition, point) => widget.onMapTap?.call(point),
           ),
@@ -1018,7 +1186,19 @@ class _CarMapState extends State<_CarMap> {
               ]),
             if (widget.locationReady)
               MarkerLayer(markers: [
-                Marker(point: widget.center, width: 44, height: 44, child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44)),
+                Marker(
+                  point: widget.center,
+                  width: 44,
+                  height: 44,
+                  // Icons.navigation points to the upper-right; rotate -45° so
+                  // its tip points "up" in map space. Since the map itself is
+                  // rotated to the travel heading, the arrow then shows the
+                  // direction of travel on screen.
+                  child: Transform.rotate(
+                    angle: -pi / 4,
+                    child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44),
+                  ),
+                ),
                 if (widget.destination != null)
                   Marker(point: widget.destination!, width: 38, height: 38, child: const Icon(Icons.location_on, color: Color(0xFFFF5252), size: 38)),
               ]),

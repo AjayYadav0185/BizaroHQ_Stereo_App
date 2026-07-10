@@ -79,4 +79,30 @@ class MediaChannel {
       return false;
     }
   }
+
+  /// Prompts the user (on Android 12+) for the BLUETOOTH_CONNECT runtime
+  /// permission and returns whether it is now granted.
+  static Future<bool> requestBluetoothPermission() async {
+    try {
+      final result = await _channel.invokeMethod('requestBluetoothPermission');
+      return result == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Returns the currently playing track title/artist from the active media
+  /// session, or empty strings if nothing is playing / unavailable.
+  static Future<({String title, String artist})> getNowPlaying() async {
+    try {
+      final result = await _channel.invokeMethod('getNowPlaying');
+      if (result is Map) {
+        return (
+          title: (result['title'] as String?) ?? '',
+          artist: (result['artist'] as String?) ?? '',
+        );
+      }
+    } catch (_) {}
+    return (title: '', artist: '');
+  }
 }

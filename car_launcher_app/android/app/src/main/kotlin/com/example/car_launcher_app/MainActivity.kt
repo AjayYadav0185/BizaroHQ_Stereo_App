@@ -1,15 +1,20 @@
 package com.example.car_launcher_app
 
+import android.Manifest
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.annotation.NonNull
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -33,11 +38,16 @@ import io.flutter.plugin.common.MethodChannel
  * - mediaNext: Skip to next track
  * - mediaVolumeUp: Increase device/media volume by one step
  * - mediaVolumeDown: Decrease device/media volume by one step
+ * - getNowPlaying: Returns the current track title/artist from the active media session
  * - isBluetoothConnected: Returns true if a Bluetooth A2DP audio device is connected
  */
 class MainActivity : FlutterActivity() {
 
     private val channelName = "com.carapp.media/control"
+
+    companion object {
+        private const val BT_PERMISSION_REQUEST_CODE = 1001
+    }
 
     // Hardware media key codes for universal media control.
     private val KEYCODE_MEDIA_PLAY_PAUSE = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
@@ -51,6 +61,45 @@ class MainActivity : FlutterActivity() {
         // This is called before any audio could be requested.
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         audioManager.abandonAudioFocus(null)
+
+        // On Android 12+ (API 31+) BLUETOOTH_CONNECT is a dangerous runtime
+        // permission and MUST be granted at runtime, not just declared in the
+        // manifest. Request it so the media card can read the A2DP state
+        // without throwing a fatal SecurityException.
+        requestBluetoothPermission()
+    }
+
+    /**
+     * Returns true if we are allowed to access Bluetooth connection info.
+     * On older APIs the permission is not required at runtime.
+     */
+    private fun hasBluetoothConnectPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.BLUETOOTH_CONNECT
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestBluetoothPermission() {
+        if (hasBluetoothConnectPermission()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                BT_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // No action needed; the media card simply polls state on a timer and
+        // will reflect the connection once (if) the permission is granted.
     }
 
     /**
@@ -75,7 +124,10 @@ class MainActivity : FlutterActivity() {
                         }
                         "mediaToggle" -> {
                             dispatchMediaAction(sessionManager, audioManager, KEYCODE_MEDIA_PLAY_PAUSE) {
-                                it.transportControls.playPause()
+                                // TransportControls has no playPause() method;
+                                // emulate the hardware key which toggles play/pause
+                                // on the active media session.
+                                dispatchMediaKeyEvent(audioManager, KEYCODE_MEDIA_PLAY_PAUSE)
                             }
                             result.success(null)
                         }
@@ -93,8 +145,15 @@ class MainActivity : FlutterActivity() {
                             dispatchVolumeKey(audioManager, KeyEvent.KEYCODE_VOLUME_DOWN)
                             result.success(null)
                         }
+                        "getNowPlaying" -> {
+                            result.success(getNowPlaying(sessionManager))
+                        }
                         "isBluetoothConnected" -> {
                             result.success(isBluetoothA2dpConnected())
+                        }
+                        "requestBluetoothPermission" -> {
+                            requestBluetoothPermission()
+                            result.success(hasBluetoothConnectPermission())
                         }
                         else -> result.notImplemented()
                     }
@@ -118,6 +177,12 @@ class MainActivity : FlutterActivity() {
         keyCode: Int,
         action: (MediaController) -> Unit
     ) {
+        if (!hasBluetoothConnectPermission()) {
+            // No permission: fall back to a raw hardware key event so the press
+            // still reaches the default active player without crashing.
+            dispatchMediaKeyEvent(audioManager, keyCode)
+            return
+        }
         val controllers = sessionManager.getActiveSessions(null)
         // Prefer a controller whose package looks like a Bluetooth / remote player;
         // otherwise use the first active controller if any.
@@ -154,6 +219,7 @@ class MainActivity : FlutterActivity() {
      * Returns true when a Bluetooth A2DP (audio) device is currently connected.
      */
     private fun isBluetoothA2dpConnected(): Boolean {
+        if (!hasBluetoothConnectPermission()) return false
         val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
         if (!adapter.isEnabled) return false
         var connected = false
@@ -213,6 +279,24 @@ class MainActivity : FlutterActivity() {
             AudioManager.STREAM_MUSIC,
             direction,
             AudioManager.FLAG_SHOW_UI
+        )
+    }
+
+    /**
+     * Reads the current track metadata (title/artist) from the active media
+     * session, preferring the Bluetooth/remote player. Returns a map that the
+     * Flutter UI uses for the scrolling "now playing" marquee.
+     */
+    private fun getNowPlaying(sessionManager: MediaSessionManager): Map<String, String> {
+        if (!hasBluetoothConnectPermission()) return mapOf("title" to "", "artist" to "")
+        val controllers = sessionManager.getActiveSessions(null)
+        val target = controllers.firstOrNull { isLikelyBluetooth(it) } ?: controllers.firstOrNull()
+        val meta = target?.metadata
+        val title = meta?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
+        val artist = meta?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+        return mapOf(
+            "title" to (title ?: ""),
+            "artist" to (artist ?: "")
         )
     }
 }
