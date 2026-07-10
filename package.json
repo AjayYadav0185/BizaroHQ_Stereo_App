@@ -1,0 +1,12 @@
+{
+  "name": "bizarohq-stereo-download",
+  "version": "1.0.0",
+  "description": "Car Stereo Launcher APK Download Page",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}

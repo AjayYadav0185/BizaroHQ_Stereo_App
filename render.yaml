@@ -1,0 +1,7 @@
+services:
+  - type: static
+    name: bizarohq-stereo
+    buildCommand: null
+    startCommand: null
+    env: static
+    rootDir: .

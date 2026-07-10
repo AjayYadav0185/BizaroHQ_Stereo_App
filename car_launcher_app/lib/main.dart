@@ -96,9 +96,23 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     } catch (_) {}
   }
 
+  /// Get current location on demand
+  Future<latlong.LatLng?> _getCurrentLocation() async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      return latlong.LatLng(position.latitude, position.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _setDestination(latlong.LatLng point) async {
     setState(() => _destination = point);
-    await _fetchRoute(_mapCenter, point);
+    if (_locationReady) {
+      await _fetchRoute(_mapCenter, point);
+    }
   }
 
   Future<void> _fetchRoute(latlong.LatLng start, latlong.LatLng end) async {
@@ -155,6 +169,24 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                         onToggle: MediaChannel.playPauseToggle,
                         onNext: MediaChannel.next,
                       ),
+                      const SizedBox(height: 16),
+                      // Location status and center button
+                      _LocationCard(
+                        isReady: _locationReady,
+                        center: _mapCenter,
+                        onCenterPressed: () async {
+                          final pos = await _getCurrentLocation();
+                          if (pos != null && mounted) {
+                            setState(() {
+                              _mapCenter = pos;
+                              _locationReady = true;
+                            });
+                            // Find the CarMap state and center it
+                            final state = context.findAncestorStateOfType<_CarMapState>();
+                            state?.centerOnLocation();
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -192,7 +224,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                     Positioned(
                       top: 16,
                       left: 16,
-                      child: _DestinationBanner(destination: _destination),
+                      child: _DestinationBanner(destination: _destination, isLocationReady: _locationReady),
                     ),
                   ],
                 ),
@@ -200,6 +232,71 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Location card with center button.
+class _LocationCard extends StatelessWidget {
+  final bool isReady;
+  final latlong.LatLng center;
+  final VoidCallback onCenterPressed;
+
+  const _LocationCard({required this.isReady, required this.center, required this.onCenterPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0F17),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF4CC3FF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isReady ? Icons.gps_fixed : Icons.gps_off,
+                color: isReady ? const Color(0xFF4CC3FF) : const Color(0xFFFF5252),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isReady ? 'GPS ACTIVE' : 'NO LOCATION',
+                style: TextStyle(
+                  color: isReady ? const Color(0xFF4CC3FF) : const Color(0xFFFF5252),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.my_location, size: 18, color: Color(0xFF4CC3FF)),
+                onPressed: onCenterPressed,
+                tooltip: 'Center on my location',
+              ),
+            ],
+          ),
+          if (isReady) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Lat: ${center.latitude.toStringAsFixed(4)}',
+              style: const TextStyle(color: Color(0xFF90A4AE), fontSize: 10),
+            ),
+            Text(
+              'Lng: ${center.longitude.toStringAsFixed(4)}',
+              style: const TextStyle(color: Color(0xFF90A4AE), fontSize: 10),
+            ),
+          ] else
+            const Text(
+              'Tap GPS button to get location',
+              style: TextStyle(color: Color(0xFF7AA6B9), fontSize: 10),
+            ),
+        ],
       ),
     );
   }
@@ -400,26 +497,40 @@ class _CircularBtn extends StatelessWidget {
 
 class _DestinationBanner extends StatelessWidget {
   final latlong.LatLng? destination;
+  final bool isLocationReady;
 
-  const _DestinationBanner({required this.destination});
+  const _DestinationBanner({required this.destination, required this.isLocationReady});
 
   @override
   Widget build(BuildContext context) {
+    final Color bannerColor = !isLocationReady || destination != null
+        ? const Color(0xFFFF5252)
+        : const Color(0xFF4CC3FF);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: destination != null ? const Color(0xFFFF5252).withValues(alpha: 0.9) : const Color(0xFF4CC3FF).withValues(alpha: 0.85),
+        color: (!isLocationReady || destination != null)
+            ? const Color(0xFFFF5252).withValues(alpha: 0.9)
+            : const Color(0xFF4CC3FF).withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: (destination != null ? const Color(0xFFFF5252) : const Color(0xFF4CC3FF)).withValues(alpha: 0.5), blurRadius: 12)],
+        boxShadow: [BoxShadow(color: bannerColor.withValues(alpha: 0.5), blurRadius: 12)],
       ),
       child: Row(
         children: [
-          Icon(destination != null ? Icons.location_on : Icons.touch_app, color: Colors.white, size: 18),
+          Icon(
+            !isLocationReady
+                ? Icons.warning
+                : destination != null ? Icons.location_on : Icons.touch_app,
+            color: Colors.white,
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Text(
-            destination != null
-                ? 'DEST: ${destination!.latitude.toStringAsFixed(4)}, ${destination!.longitude.toStringAsFixed(4)}'
-                : 'TAP MAP TO SELECT DESTINATION',
+            !isLocationReady
+                ? 'ALLOW LOCATION PERMISSION'
+                : destination != null
+                    ? 'DEST: ${destination!.latitude.toStringAsFixed(4)}, ${destination!.longitude.toStringAsFixed(4)}'
+                    : 'TAP MAP TO SELECT DESTINATION',
             style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ],
@@ -454,11 +565,15 @@ class _CarMapState extends State<_CarMap> {
   @override
   void didUpdateWidget(covariant _CarMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Map no longer auto-centers on every GPS update - allows free dragging
   }
 
   void zoomIn() => _mapController.move(_mapController.camera.center, _mapController.camera.zoom + 1);
   void zoomOut() => _mapController.move(_mapController.camera.center, _mapController.camera.zoom - 1);
+  void centerOnLocation() {
+    if (widget.locationReady && mounted) {
+      _mapController.move(widget.center, 16.5);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
