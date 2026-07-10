@@ -280,6 +280,10 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                         destination: _destination,
                         isLocationReady: _locationReady,
                         isOnline: _isOnline,
+                        onClear: () => setState(() {
+                          _destination = null;
+                          _routePoints = [];
+                        }),
                       ),
                     ),
                   ],
@@ -555,11 +559,13 @@ class _DestinationBanner extends StatelessWidget {
   final latlong.LatLng? destination;
   final bool isLocationReady;
   final bool isOnline;
+  final VoidCallback? onClear;
 
   const _DestinationBanner({
     required this.destination,
     required this.isLocationReady,
     required this.isOnline,
+    this.onClear,
   });
 
   @override
@@ -594,6 +600,7 @@ class _DestinationBanner extends StatelessWidget {
         boxShadow: [BoxShadow(color: bgColor.withValues(alpha: 0.5), blurRadius: 12)],
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             !isLocationReady
@@ -607,10 +614,28 @@ class _DestinationBanner extends StatelessWidget {
             size: 18,
           ),
           const SizedBox(width: 8),
-          Text(
-            message,
-            style: TextStyle(color: iconColor, fontSize: 12, fontWeight: FontWeight.w700),
+          Flexible(
+            child: Text(
+              message,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: iconColor, fontSize: 12, fontWeight: FontWeight.w700),
+            ),
           ),
+          // Show a clear button when a destination is set
+          if (destination != null) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onClear,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.close, color: iconColor, size: 16),
+              ),
+            ),
+          ],
         ],
       ),
     );
