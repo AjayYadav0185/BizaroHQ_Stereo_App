@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BizaroHQ Garage Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-bg: #1c1c1e;
+            --accent-color: #ff3b30;
+            --accent-hover: #e02e24;
+            --text-main: #ffffff;
+            --text-muted: #8e8e93;
+            --neon-glow: rgba(255, 59, 48, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .garage-container {
+            background: var(--card-bg);
+            border: 2px solid #2c2c2e;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 480px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px var(--neon-glow);
+        }
+
+        .icon-container {
+            margin-bottom: 24px;
+        }
+
+        .garage-icon {
+            width: 80px;
+            height: 80px;
+            background: #2c2c2e;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--accent-color);
+            box-shadow: 0 0 15px var(--neon-glow);
+        }
+
+        .garage-icon svg {
+            fill: var(--accent-color);
+            width: 40px;
+            height: 40px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        p {
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 32px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            background-color: var(--accent-color);
+            color: #ffffff;
+            text-decoration: none;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+        }
+
+        .download-btn:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(255, 59, 48, 0.4);
+        }
+
+        .download-btn:active {
+            transform: translateY(1px);
+        }
+
+        .footer-note {
+            margin-top: 24px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .footer-note a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        .footer-note a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="garage-container">
+        <div class="icon-container">
+            <div class="garage-icon">
+                <!-- Mechanical / Car Stereo Icon -->
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12A7,7 0 0,1 12,5A7,7 0 0,1 19,12M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9Z" />
+                </svg>
+            </div>
+        </div>
+
+        <h1>BizaroHQ Stereo System</h1>
+        <p>Download the official car stereo interface APK directly to your smart system hardware dashboard container.
+        </p>
+
+        <!-- Main Dynamic Download Action Tag Trigger -->
+        <a href="https://github.com" class="download-btn" download>
+            <!-- Native Android / Download Icon -->
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Install Stereo APK
+        </a>
+
+        <div class="footer-note">
+            Powered by <a href="https://github.com/AjayYadav0185/BizaroHQ_Stereo_App" target="_blank"
+                rel="noopener noreferrer">BizaroHQ Open Source Assets</a>
+        </div>
+    </div>
+
+</body>
+
+</html>
