@@ -1,33 +1,31 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.car_launcher_app">
 
     <!--
-      Car Stereo Launcher permissions
+    Car Stereo Launcher - Production Configuration
+    ============================================
 
-      Goals:
-      - Show as default/primary HOME launcher for landscape head units
-      - Access GPS (speed + map center)
-      - Access Bluetooth (for Bluetooth audio playback compatibility)
+    This manifest configures the app as a system home launcher for
+    Android car head units with landscape orientation.
     -->
 
-    <!-- Bluetooth permissions (Android 12+). -->
+    <!-- Internet permission for WebView (FASTag integration) -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-
-    <!-- Location permissions for GPS speed & map centering. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-
-    <!-- Keep running reliably on head units. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:label="Car Stereo Launcher"
         android:icon="@mipmap/ic_launcher"
-        android:allowBackup="false">
+        android:allowBackup="false"
+        android:hardwareAccelerated="true">
 
         <activity
             android:name=".MainActivity"
@@ -35,19 +33,18 @@
             android:launchMode="singleInstance"
             android:taskAffinity=""
             android:screenOrientation="landscape"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
             android:theme="@style/LaunchTheme"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
 
-            <!-- Register as launcher (HOME + DEFAULT categories). -->
+            <!-- HOME & DEFAULT intent filter - Registers as system launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
-            <!-- Optional: also allow entry via the standard launcher list. -->
+            <!-- LAUNCHER intent filter -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -65,7 +62,6 @@
 
     </application>
 
-    <!-- Required for some Flutter plugins to query activities. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
@@ -74,4 +70,3 @@
     </queries>
 
 </manifest>
-

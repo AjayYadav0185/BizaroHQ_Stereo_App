@@ -1,7 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Application name shown in launcher and settings -->
     <string name="app_name">Car Stereo Launcher</string>
 
-    <!-- Needed by Android 12+ location permission prompts. -->
-    <string name="location_permission_message">We need location access to show your speed and position on the map.</string>
-</resources>
+    <!-- Location permission rationale for Android 12+ -->
+    <string name="location_permission_message">Location access is required to display your current speed and center the map on your vehicle position.</string>
 
+    <!-- Bluetooth permission rationale -->
+    <string name="bluetooth_permission_message">Bluetooth access allows the launcher to work seamlessly with your cars Bluetooth audio system.</string>
+</resources>
