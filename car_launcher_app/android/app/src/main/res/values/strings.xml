@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Car Stereo Launcher</string>
+
+    <!-- Needed by Android 12+ location permission prompts. -->
+    <string name="location_permission_message">We need location access to show your speed and position on the map.</string>
+</resources>
+
