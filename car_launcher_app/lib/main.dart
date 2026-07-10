@@ -68,6 +68,9 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   bool _isOnline = true;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
+  // Bluetooth media device connection state
+  bool _btConnected = false;
+
   // Global key to access map state
   final GlobalKey<_CarMapState> _mapKey = GlobalKey<_CarMapState>();
 
@@ -82,7 +85,27 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
       setState(() => _now = DateTime.now());
     });
     _startConnectivityMonitoring();
+    _startBluetoothMonitoring();
     _startLocation();
+  }
+
+  /// Poll Bluetooth A2DP connection state so the media card reflects the
+  /// connected device in real time.
+  Future<void> _startBluetoothMonitoring() async {
+    await _refreshBluetooth();
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 3));
+      if (!mounted) return false;
+      await _refreshBluetooth();
+      return true;
+    });
+  }
+
+  Future<void> _refreshBluetooth() async {
+    final connected = await MediaChannel.isBluetoothConnected();
+    if (mounted && connected != _btConnected) {
+      setState(() => _btConnected = connected);
+    }
   }
 
   Future<void> _startConnectivityMonitoring() async {
@@ -224,9 +247,12 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                           _GlassContainer(
                             tint: const Color(0xFF4CC3FF),
                             child: _PremiumMediaCard(
+                              isBluetoothConnected: _btConnected,
                               onPrevious: MediaChannel.previous,
                               onToggle: MediaChannel.playPauseToggle,
                               onNext: MediaChannel.next,
+                              onVolumeUp: MediaChannel.volumeUp,
+                              onVolumeDown: MediaChannel.volumeDown,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -692,29 +718,61 @@ class _PremiumSpeedometer extends StatelessWidget {
 
 /// Premium media card.
 class _PremiumMediaCard extends StatelessWidget {
+  final bool isBluetoothConnected;
   final Future<void> Function() onPrevious;
   final Future<void> Function() onToggle;
   final Future<void> Function() onNext;
+  final Future<void> Function() onVolumeUp;
+  final Future<void> Function() onVolumeDown;
 
-  const _PremiumMediaCard({required this.onPrevious, required this.onToggle, required this.onNext});
+  const _PremiumMediaCard({
+    required this.isBluetoothConnected,
+    required this.onPrevious,
+    required this.onToggle,
+    required this.onNext,
+    required this.onVolumeUp,
+    required this.onVolumeDown,
+  });
 
   @override
   Widget build(BuildContext context) {
     const Color primary = Color(0xFF4CC3FF);
-    
+    final Color btColor = isBluetoothConnected ? const Color(0xFF4CC3FF) : const Color(0xFFFF5252);
+    final String btLabel = isBluetoothConnected ? 'BT CONNECTED' : 'NO BLUETOOTH';
+
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('MEDIA CONTROLS', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 2)),
+          Row(
+            children: [
+              const Text('MEDIA CONTROLS', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 2)),
+              const Spacer(),
+              Icon(Icons.bluetooth, color: btColor, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                btLabel,
+                style: TextStyle(
+                  color: btColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
+              // Left side: volume down
+              _MediaBtn(icon: Icons.volume_down_rounded, label: 'VOL -', color: primary, onPressed: onVolumeDown),
               _MediaBtn(icon: Icons.skip_previous_rounded, label: 'PREV', color: primary, onPressed: onPrevious),
               _MediaBtn(icon: Icons.play_arrow_rounded, label: 'PLAY', color: primary, isPrimary: true, onPressed: onToggle),
               _MediaBtn(icon: Icons.skip_next_rounded, label: 'NEXT', color: primary, onPressed: onNext),
+              // Right side: volume up
+              _MediaBtn(icon: Icons.volume_up_rounded, label: 'VOL +', color: primary, onPressed: onVolumeUp),
             ],
           ),
         ],
