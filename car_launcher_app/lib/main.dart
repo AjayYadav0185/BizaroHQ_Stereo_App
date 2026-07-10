@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,102 +26,14 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Car Stereo Launcher',
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: AppColors.bg,
+        scaffoldBackgroundColor: const Color(0xFF070A0F),
         colorScheme: const ColorScheme.dark(
-          primary: AppColors.accentBlue,
-          secondary: AppColors.accentPurple,
+          primary: Color(0xFF4CC3FF),
+          secondary: Color(0xFF9B8CFF),
         ),
       ),
       home: const CarLauncherPage(),
     );
-  }
-}
-
-/// ---------------------------------------------------------------------
-/// Design tokens — single source of truth for the dashboard's palette.
-/// ---------------------------------------------------------------------
-class AppColors {
-  AppColors._();
-
-  static const Color bg = Color(0xFF05070C);
-  static const Color bgGradientTop = Color(0xFF0A0E17);
-  static const Color bgGradientBottom = Color(0xFF0E141F);
-
-  static const Color card = Color(0xFF0C1119);
-  static const Color cardBorder = Color(0x1FFFFFFF);
-  static const Color cardBorderStrong = Color(0x334CC3FF);
-
-  static const Color accentBlue = Color(0xFF4CC3FF);
-  static const Color accentPurple = Color(0xFF9B8CFF);
-  static const Color accentAmber = Color(0xFFFFB74D);
-  static const Color accentGreen = Color(0xFF4CD787);
-  static const Color accentRed = Color(0xFFFF5C5C);
-  static const Color accentYellow = Color(0xFFE8D24C);
-  static const Color accentOrange = Color(0xFFFF9950);
-
-  static const Color textPrimary = Color(0xFFF3F8FF);
-  static const Color textSecondary = Color(0xFF8FA6BB);
-  static const Color textMuted = Color(0xFF54697D);
-
-  static const LinearGradient brandGradient = LinearGradient(
-    colors: [accentBlue, accentPurple],
-  );
-}
-
-/// ---------------------------------------------------------------------
-/// Static placeholder weather/AQI data.
-/// Swap this out for a live provider (e.g. OpenWeather) later — the UI
-/// below already reads exclusively from this model, so wiring in live
-/// data only means replacing these constants with fetched values.
-/// ---------------------------------------------------------------------
-class WeatherData {
-  final double tempC;
-  final String condition;
-  final IconData conditionIcon;
-  final double highC;
-  final double lowC;
-  final int humidityPct;
-  final double windKmh;
-  final int aqi;
-
-  const WeatherData({
-    required this.tempC,
-    required this.condition,
-    required this.conditionIcon,
-    required this.highC,
-    required this.lowC,
-    required this.humidityPct,
-    required this.windKmh,
-    required this.aqi,
-  });
-
-  static const WeatherData placeholder = WeatherData(
-    tempC: 24,
-    condition: 'Partly Cloudy',
-    conditionIcon: Icons.wb_cloudy_rounded,
-    highC: 28,
-    lowC: 18,
-    humidityPct: 58,
-    windKmh: 12,
-    aqi: 42,
-  );
-
-  /// EPA-style AQI banding.
-  String get aqiLabel {
-    if (aqi <= 50) return 'Good';
-    if (aqi <= 100) return 'Moderate';
-    if (aqi <= 150) return 'Unhealthy (SG)';
-    if (aqi <= 200) return 'Unhealthy';
-    if (aqi <= 300) return 'Very Unhealthy';
-    return 'Hazardous';
-  }
-
-  Color get aqiColor {
-    if (aqi <= 50) return AppColors.accentGreen;
-    if (aqi <= 100) return AppColors.accentYellow;
-    if (aqi <= 150) return AppColors.accentOrange;
-    if (aqi <= 200) return AppColors.accentRed;
-    return const Color(0xFFB388FF);
   }
 }
 
@@ -147,9 +58,6 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   bool _locationReady = false;
   latlong.LatLng? _destination;
   List<latlong.LatLng> _routePoints = [];
-
-  // Static for now — replace with a live weather/AQI fetch later.
-  final WeatherData _weather = WeatherData.placeholder;
 
   // Global key to access map state
   final GlobalKey<_CarMapState> _mapKey = GlobalKey<_CarMapState>();
@@ -218,7 +126,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     try {
       final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson';
       final response = await http.get(Uri.parse(url));
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['code'] == 'Ok' && data['routes'].isNotEmpty) {
@@ -248,30 +156,20 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
             Flexible(
               flex: 4,
               child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.bgGradientTop, AppColors.bgGradientBottom],
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0A0E17), Color(0xFF0F1722)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                padding: const EdgeInsets.all(16),
                 child: SingleChildScrollView(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _BrandStatusBar(),
-                      const SizedBox(height: 14),
                       _PremiumClockBlock(timeText: _timeFmt.format(_now), dateText: _dateFmt.format(_now)),
                       const SizedBox(height: 16),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(child: _PremiumSpeedometer(speedKmh: _speedKmh)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _WeatherCard(weather: _weather)),
-                        ],
-                      ),
+                      _PremiumSpeedometer(speedKmh: _speedKmh),
                       const SizedBox(height: 16),
                       _PremiumMediaCard(
                         onPrevious: MediaChannel.previous,
@@ -299,8 +197,8 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(20),
-                        bottomRight: Radius.circular(20),
+                        topRight: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
                       ),
                       child: _CarMap(
                         key: _mapKey,
@@ -336,79 +234,6 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   }
 }
 
-/// Reusable dashboard card shell — keeps borders, radii, and shadows
-/// consistent across every widget on the left rail.
-class _DashboardCard extends StatelessWidget {
-  final Widget child;
-  final Color accent;
-  final EdgeInsetsGeometry padding;
-  final Gradient? backgroundGradient;
-
-  const _DashboardCard({
-    required this.child,
-    this.accent = AppColors.accentBlue,
-    this.padding = const EdgeInsets.all(16),
-    this.backgroundGradient,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: backgroundGradient == null ? AppColors.card : null,
-        gradient: backgroundGradient,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
-        boxShadow: [
-          BoxShadow(color: accent.withValues(alpha: 0.12), blurRadius: 18, spreadRadius: -2),
-          const BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 4)),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-/// Small header row: brand mark + connectivity glyphs. Purely cosmetic,
-/// gives the dashboard a "system" feel instead of a stack of widgets.
-class _BrandStatusBar extends StatelessWidget {
-  const _BrandStatusBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            gradient: AppColors.brandGradient,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.directions_car_filled_rounded, size: 16, color: Colors.white),
-        ),
-        const SizedBox(width: 8),
-        const Text(
-          'DRIVE OS',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.4,
-          ),
-        ),
-        const Spacer(),
-        const Icon(Icons.bluetooth_rounded, size: 16, color: AppColors.textSecondary),
-        const SizedBox(width: 10),
-        const Icon(Icons.signal_cellular_alt_rounded, size: 16, color: AppColors.textSecondary),
-        const SizedBox(width: 10),
-        const Icon(Icons.battery_full_rounded, size: 16, color: AppColors.textSecondary),
-      ],
-    );
-  }
-}
-
 /// Location card with center button.
 class _LocationCard extends StatelessWidget {
   final bool isReady;
@@ -419,111 +244,56 @@ class _LocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color statusColor = isReady ? AppColors.accentGreen : AppColors.accentRed;
-    return _DashboardCard(
-      accent: statusColor,
+    return Container(
       padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0F17),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF4CC3FF)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(
-                  isReady ? Icons.gps_fixed_rounded : Icons.gps_off_rounded,
-                  color: statusColor,
-                  size: 16,
-                ),
+              Icon(
+                isReady ? Icons.gps_fixed : Icons.gps_off,
+                color: isReady ? const Color(0xFF4CC3FF) : const Color(0xFFFF5252),
+                size: 20,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Text(
                 isReady ? 'GPS ACTIVE' : 'NO LOCATION',
                 style: TextStyle(
-                  color: statusColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
+                  color: isReady ? const Color(0xFF4CC3FF) : const Color(0xFFFF5252),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const Spacer(),
-              _IconGhostButton(icon: Icons.my_location_rounded, onPressed: onCenterPressed, tooltip: 'Center on my location'),
+              IconButton(
+                icon: const Icon(Icons.my_location, size: 18, color: Color(0xFF4CC3FF)),
+                onPressed: onCenterPressed,
+                tooltip: 'Center on my location',
+              ),
             ],
           ),
           if (isReady) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatChip(label: 'LAT', value: center.latitude.toStringAsFixed(4)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatChip(label: 'LNG', value: center.longitude.toStringAsFixed(4)),
-                ),
-              ],
+            const SizedBox(height: 6),
+            Text(
+              'Lat: ${center.latitude.toStringAsFixed(4)}',
+              style: const TextStyle(color: Color(0xFF90A4AE), fontSize: 10),
+            ),
+            Text(
+              'Lng: ${center.longitude.toStringAsFixed(4)}',
+              style: const TextStyle(color: Color(0xFF90A4AE), fontSize: 10),
             ),
           ] else
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                'Tap the GPS button to get your location',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 11),
-              ),
+            const Text(
+              'Tap GPS button to get location',
+              style: TextStyle(color: Color(0xFF7AA6B9), fontSize: 10),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatChip({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1)),
-          const SizedBox(height: 2),
-          Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-}
-
-class _IconGhostButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final String? tooltip;
-  const _IconGhostButton({required this.icon, required this.onPressed, this.tooltip});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.04),
-      shape: const CircleBorder(),
-      child: IconButton(
-        icon: Icon(icon, size: 16, color: AppColors.accentBlue),
-        onPressed: onPressed,
-        tooltip: tooltip,
-        splashRadius: 18,
       ),
     );
   }
@@ -533,7 +303,7 @@ class _IconGhostButton extends StatelessWidget {
 class _PremiumClockBlock extends StatelessWidget {
   final String timeText;
   final String dateText;
-
+  
   const _PremiumClockBlock({required this.timeText, required this.dateText});
 
   @override
@@ -542,212 +312,60 @@ class _PremiumClockBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ShaderMask(
-          shaderCallback: (bounds) => AppColors.brandGradient.createShader(bounds),
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [Color(0xFF4CC3FF), Color(0xFF9B8CFF)],
+            tileMode: TileMode.clamp,
+          ).createShader(bounds),
           child: Text(
             timeText,
             style: const TextStyle(
-              fontSize: 40,
+              fontSize: 42,
               fontWeight: FontWeight.w800,
-              letterSpacing: 1,
+              letterSpacing: 1.5,
               color: Colors.white,
-              height: 1,
+              shadows: [Shadow(blurRadius: 10, color: Color(0x664CC3FF))],
             ),
           ),
         ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Container(
-              width: 4,
-              height: 4,
-              decoration: const BoxDecoration(color: AppColors.textSecondary, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(dateText, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
-          ],
-        ),
+        const SizedBox(height: 4),
+        Text(dateText, style: const TextStyle(fontSize: 16, color: Color(0xFF7AA6B9), fontWeight: FontWeight.w500)),
       ],
     );
   }
 }
 
-/// Premium speedometer — arc gauge with a digital readout in the center.
+/// Premium speedometer.
 class _PremiumSpeedometer extends StatelessWidget {
   final double speedKmh;
-  static const double maxSpeed = 220;
-
+  
   const _PremiumSpeedometer({required this.speedKmh});
 
   @override
   Widget build(BuildContext context) {
     final intSpeed = speedKmh.isFinite ? speedKmh.round() : 0;
-
-    return _DashboardCard(
-      padding: const EdgeInsets.all(14),
-      backgroundGradient: const RadialGradient(
-        colors: [Color(0xFF10161F), Color(0xFF090C12)],
-        center: Alignment.center,
-        radius: 1.1,
-      ),
-      child: SizedBox(
-        height: 148,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(
-              size: const Size.square(140),
-              painter: _SpeedGaugePainter(speedKmh: speedKmh, maxSpeed: maxSpeed),
-            ),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$intSpeed',
-                  style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.textPrimary,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'KM/H',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2),
-                ),
-              ],
-            ),
-          ],
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const RadialGradient(
+          colors: [Color(0xFF0B0F17), Color(0xFF05070C)],
+          center: Alignment.center,
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF4CC3FF), width: 2),
+        boxShadow: const [
+          BoxShadow(color: Color(0x334CC3FF), blurRadius: 20, spreadRadius: 2),
+        ],
       ),
-    );
-  }
-}
-
-class _SpeedGaugePainter extends CustomPainter {
-  final double speedKmh;
-  final double maxSpeed;
-
-  _SpeedGaugePainter({required this.speedKmh, required this.maxSpeed});
-
-  static const double _startAngle = math.pi * 0.75; // 135°
-  static const double _sweepAngle = math.pi * 1.5; // 270°
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 8;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-
-    final trackPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.06)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 9
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, _startAngle, _sweepAngle, false, trackPaint);
-
-    final double progress = (speedKmh.isFinite ? speedKmh / maxSpeed : 0.0).clamp(0.0, 1.0).toDouble();
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..shader = SweepGradient(
-          colors: const [AppColors.accentBlue, AppColors.accentPurple],
-          startAngle: _startAngle,
-          endAngle: _startAngle + _sweepAngle,
-          transform: const GradientRotation(0),
-        ).createShader(rect)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 9
-        ..strokeCap = StrokeCap.round;
-      canvas.drawArc(rect, _startAngle, _sweepAngle * progress, false, progressPaint);
-    }
-
-    // Tick marks every 10% around the track.
-    final tickPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.18)
-      ..strokeWidth = 2;
-    for (int i = 0; i <= 10; i++) {
-      final angle = _startAngle + _sweepAngle * (i / 10);
-      final outer = Offset(center.dx + (radius + 6) * math.cos(angle), center.dy + (radius + 6) * math.sin(angle));
-      final inner = Offset(center.dx + (radius - 2) * math.cos(angle), center.dy + (radius - 2) * math.sin(angle));
-      canvas.drawLine(inner, outer, tickPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SpeedGaugePainter oldDelegate) =>
-      oldDelegate.speedKmh != speedKmh || oldDelegate.maxSpeed != maxSpeed;
-}
-
-/// Weather + AQI card. Reads entirely from [WeatherData] — currently a
-/// static placeholder, ready to be swapped for a live provider.
-class _WeatherCard extends StatelessWidget {
-  final WeatherData weather;
-  const _WeatherCard({required this.weather});
-
-  @override
-  Widget build(BuildContext context) {
-    return _DashboardCard(
-      accent: AppColors.accentAmber,
-      padding: const EdgeInsets.all(14),
-      child: SizedBox(
-        height: 148,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: AppColors.accentAmber.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(weather.conditionIcon, size: 19, color: AppColors.accentAmber),
-                ),
-                const Spacer(),
-                Text(
-                  '${weather.tempC.round()}°',
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 30, fontWeight: FontWeight.w800, height: 1),
-                ),
-              ],
-            ),
-            Text(
-              weather.condition,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            Row(
-              children: [
-                Icon(Icons.arrow_upward_rounded, size: 12, color: AppColors.textMuted),
-                Text('${weather.highC.round()}°', style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                Icon(Icons.arrow_downward_rounded, size: 12, color: AppColors.textMuted),
-                Text('${weather.lowC.round()}°', style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: weather.aqiColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: weather.aqiColor.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  Container(width: 6, height: 6, decoration: BoxDecoration(color: weather.aqiColor, shape: BoxShape.circle)),
-                  const SizedBox(width: 6),
-                  Text('AQI ${weather.aqi}', style: TextStyle(color: weather.aqiColor, fontSize: 10.5, fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  Text(weather.aqiLabel, style: TextStyle(color: weather.aqiColor, fontSize: 10, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-          ],
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('SPEED', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 3)),
+          const SizedBox(height: 8),
+          Text('$intSpeed', style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, color: Color(0xFFEFF6FF), letterSpacing: 1)),
+          const Text('KM/H', style: TextStyle(color: Color(0xFF90A4AE), fontSize: 14, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
@@ -763,24 +381,27 @@ class _PremiumMediaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _DashboardCard(
+    const Color primary = Color(0xFF4CC3FF);
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0F17),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: primary),
+        boxShadow: const [BoxShadow(color: Color(0x334CC3FF), blurRadius: 15)],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.graphic_eq_rounded, size: 14, color: AppColors.textSecondary),
-              const SizedBox(width: 6),
-              const Text('MEDIA CONTROLS', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w800, letterSpacing: 1.6, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 14),
+          const Text('MEDIA CONTROLS', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 2)),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _MediaBtn(icon: Icons.skip_previous_rounded, label: 'PREV', onPressed: onPrevious),
-              _MediaBtn(icon: Icons.play_arrow_rounded, label: 'PLAY', isPrimary: true, onPressed: onToggle),
-              _MediaBtn(icon: Icons.skip_next_rounded, label: 'NEXT', onPressed: onNext),
+              _MediaBtn(icon: Icons.skip_previous_rounded, label: 'PREV', color: primary, onPressed: onPrevious),
+              _MediaBtn(icon: Icons.play_arrow_rounded, label: 'PLAY', color: primary, isPrimary: true, onPressed: onToggle),
+              _MediaBtn(icon: Icons.skip_next_rounded, label: 'NEXT', color: primary, onPressed: onNext),
             ],
           ),
         ],
@@ -792,10 +413,11 @@ class _PremiumMediaCard extends StatelessWidget {
 class _MediaBtn extends StatelessWidget {
   final IconData icon;
   final String label;
+  final Color color;
   final bool isPrimary;
   final Future<void> Function() onPressed;
 
-  const _MediaBtn({required this.icon, required this.label, required this.onPressed, this.isPrimary = false});
+  const _MediaBtn({required this.icon, required this.label, required this.color, required this.onPressed, this.isPrimary = false});
 
   @override
   Widget build(BuildContext context) {
@@ -805,22 +427,19 @@ class _MediaBtn extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onPressed,
         child: Container(
-          width: 74,
+          width: 70,
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
-            gradient: isPrimary ? AppColors.brandGradient : null,
-            color: isPrimary ? null : Colors.white.withValues(alpha: 0.03),
+            gradient: isPrimary ? RadialGradient(colors: [color, color.withValues(alpha: 0.3)]) : null,
+            color: isPrimary ? null : const Color(0xFF070A0F),
             borderRadius: BorderRadius.circular(16),
-            border: isPrimary ? null : Border.all(color: AppColors.cardBorder),
-            boxShadow: isPrimary
-                ? [BoxShadow(color: AppColors.accentBlue.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4))]
-                : null,
+            border: Border.all(color: color, width: isPrimary ? 2 : 1),
           ),
           child: Column(
             children: [
-              Icon(icon, size: 26, color: Colors.white),
+              Icon(icon, size: 28, color: Colors.white),
               const SizedBox(height: 6),
-              Text(label, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1)),
+              Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 1)),
             ],
           ),
         ),
@@ -838,14 +457,15 @@ class _MapControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const Color accent = Color(0xFF4CC3FF);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _CircularBtn(icon: Icons.add_rounded, onPressed: onZoomIn),
+        _CircularBtn(icon: Icons.add, onPressed: onZoomIn, color: accent),
         const SizedBox(height: 8),
-        _CircularBtn(icon: Icons.remove_rounded, onPressed: onZoomOut),
+        _CircularBtn(icon: Icons.remove, onPressed: onZoomOut, color: accent),
         const SizedBox(height: 8),
-        _CircularBtn(icon: Icons.my_location_rounded, onPressed: onMyLocation),
+        _CircularBtn(icon: Icons.my_location, onPressed: onMyLocation, color: accent),
       ],
     );
   }
@@ -854,19 +474,20 @@ class _MapControls extends StatelessWidget {
 class _CircularBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
+  final Color color;
 
-  const _CircularBtn({required this.icon, required this.onPressed});
+  const _CircularBtn({required this.icon, required this.onPressed, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF0B0F17).withValues(alpha: 0.9),
-        border: Border.all(color: AppColors.accentBlue.withValues(alpha: 0.5)),
-        boxShadow: [BoxShadow(color: AppColors.accentBlue.withValues(alpha: 0.25), blurRadius: 10)],
+        color: const Color(0xFF0B0F17).withValues(alpha: 0.85),
+        border: Border.all(color: color),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 10)],
       ),
-      child: IconButton(icon: Icon(icon, color: AppColors.accentBlue, size: 20), onPressed: onPressed, splashRadius: 20),
+      child: IconButton(icon: Icon(icon, color: color, size: 22), onPressed: onPressed),
     );
   }
 }
@@ -879,34 +500,35 @@ class _DestinationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool alert = !isLocationReady;
-    final bool hasDest = destination != null;
-    final Color bannerColor = alert ? AppColors.accentRed : (hasDest ? AppColors.accentBlue : AppColors.textSecondary);
-
+    final Color bannerColor = !isLocationReady || destination != null
+        ? const Color(0xFFFF5252)
+        : const Color(0xFF4CC3FF);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B0F17).withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: bannerColor.withValues(alpha: 0.55)),
-        boxShadow: [BoxShadow(color: bannerColor.withValues(alpha: 0.25), blurRadius: 12)],
+        color: (!isLocationReady || destination != null)
+            ? const Color(0xFFFF5252).withValues(alpha: 0.9)
+            : const Color(0xFF4CC3FF).withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: bannerColor.withValues(alpha: 0.5), blurRadius: 12)],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            alert ? Icons.warning_rounded : (hasDest ? Icons.location_on_rounded : Icons.touch_app_rounded),
-            color: bannerColor,
-            size: 16,
+            !isLocationReady
+                ? Icons.warning
+                : destination != null ? Icons.location_on : Icons.touch_app,
+            color: Colors.white,
+            size: 18,
           ),
           const SizedBox(width: 8),
           Text(
-            alert
+            !isLocationReady
                 ? 'ALLOW LOCATION PERMISSION'
-                : hasDest
+                : destination != null
                     ? 'DEST: ${destination!.latitude.toStringAsFixed(4)}, ${destination!.longitude.toStringAsFixed(4)}'
                     : 'TAP MAP TO SELECT DESTINATION',
-            style: TextStyle(color: bannerColor, fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -959,13 +581,13 @@ class _CarMapState extends State<_CarMap> {
         TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.carapp.launcher'),
         if (widget.routePoints.isNotEmpty)
           PolylineLayer(polylines: [
-            Polyline(points: widget.routePoints, color: AppColors.accentBlue, strokeWidth: 5),
+            Polyline(points: widget.routePoints, color: const Color(0xFF4CC3FF), strokeWidth: 5),
           ]),
         if (widget.locationReady)
           MarkerLayer(markers: [
-            Marker(point: widget.center, width: 44, height: 44, child: const Icon(Icons.navigation, color: AppColors.accentBlue, size: 44)),
+            Marker(point: widget.center, width: 44, height: 44, child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44)),
             if (widget.destination != null)
-              Marker(point: widget.destination!, width: 38, height: 38, child: const Icon(Icons.location_on, color: AppColors.accentRed, size: 38)),
+              Marker(point: widget.destination!, width: 38, height: 38, child: const Icon(Icons.location_on, color: Color(0xFFFF5252), size: 38)),
           ]),
       ],
     );
