@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import 'media_channel.dart';
 import 'tile_cache.dart';
@@ -58,6 +59,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
 
   latlong.LatLng _mapCenter = const latlong.LatLng(37.4219999, -122.0840575);
   bool _locationReady = false;
+  bool _autoCenterMap = true; // Toggle for auto-centering on live location
   latlong.LatLng? _destination;
   List<latlong.LatLng> _routePoints = [];
 
@@ -113,6 +115,10 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
           _mapCenter = latlong.LatLng(pos.latitude, pos.longitude);
           _locationReady = true;
         });
+        // Auto-center map only if toggle is enabled
+        if (_autoCenterMap && mounted) {
+          _mapKey.currentState?.centerOnLocation();
+        }
       }, onError: (_) {});
     } catch (_) {}
   }
@@ -162,6 +168,13 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     } catch (_) {}
   }
 
+  /// Toggle auto-center behavior
+  void _toggleAutoCenter(bool value) {
+    setState(() {
+      _autoCenterMap = value;
+    });
+  }
+
   @override
   void dispose() {
     _clockTimer?.cancel();
@@ -193,6 +206,8 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                     children: [
                       _PremiumClockBlock(timeText: _timeFmt.format(_now), dateText: _dateFmt.format(_now)),
                       const SizedBox(height: 16),
+                      _RotatingCar3D(),
+                      const SizedBox(height: 16),
                       _PremiumSpeedometer(speedKmh: _speedKmh),
                       const SizedBox(height: 16),
                       _PremiumMediaCard(
@@ -201,10 +216,12 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                         onNext: MediaChannel.next,
                       ),
                       const SizedBox(height: 16),
-                      // Location status and center button
+                      // Location status and center button with auto-center toggle
                       _LocationCard(
                         isReady: _locationReady,
                         center: _mapCenter,
+                        autoCenterEnabled: _autoCenterMap,
+                        onAutoCenterChanged: _toggleAutoCenter,
                         onCenterPressed: _centerOnCurrentLocation,
                       ),
                     ],
@@ -297,13 +314,15 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   }
 }
 
-/// Location card with center button.
+/// Location card with center button and auto-center toggle.
 class _LocationCard extends StatelessWidget {
   final bool isReady;
   final latlong.LatLng center;
+  final bool autoCenterEnabled;
+  final ValueChanged<bool> onAutoCenterChanged;
   final VoidCallback onCenterPressed;
 
-  const _LocationCard({required this.isReady, required this.center, required this.onCenterPressed});
+  const _LocationCard({required this.isReady, required this.center, required this.autoCenterEnabled, required this.onAutoCenterChanged, required this.onCenterPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +375,35 @@ class _LocationCard extends StatelessWidget {
               'Tap GPS button to get location',
               style: TextStyle(color: Color(0xFF7AA6B9), fontSize: 10),
             ),
+          const SizedBox(height: 12),
+          // Auto-center toggle
+          Row(
+            children: [
+              Switch(
+                value: autoCenterEnabled,
+                onChanged: onAutoCenterChanged,
+                activeThumbColor: const Color(0xFF4CC3FF),
+                inactiveThumbColor: const Color(0xFF7AA6B9),
+                inactiveTrackColor: const Color(0xFF070A0F),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  autoCenterEnabled ? 'Auto-Follow Enabled' : 'Manual Drag Mode',
+                  style: TextStyle(
+                    color: autoCenterEnabled ? const Color(0xFF4CC3FF) : const Color(0xFF7AA6B9),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(
+                autoCenterEnabled ? Icons.autorenew : Icons.pan_tool,
+                color: autoCenterEnabled ? const Color(0xFF4CC3FF) : const Color(0xFF7AA6B9),
+                size: 16,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -393,6 +441,47 @@ class _PremiumClockBlock extends StatelessWidget {
         const SizedBox(height: 4),
         Text(dateText, style: const TextStyle(fontSize: 16, color: Color(0xFF7AA6B9), fontWeight: FontWeight.w500)),
       ],
+    );
+  }
+}
+
+/// Premium 3D rotating car model.
+class _RotatingCar3D extends StatelessWidget {
+  const _RotatingCar3D();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0F17),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF4CC3FF), width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Color(0x334CC3FF), blurRadius: 15),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18.5),
+        child: ModelViewer(
+          src: 'assets/models/car.glb',
+          alt: 'Rotating 3D Car Model',
+          ar: false,
+          autoRotate: true,
+          autoRotateDelay: 0,
+          rotationPerSecond: '20deg',
+          cameraControls: false,
+          disableZoom: true,
+          disablePan: true,
+          disableTap: true,
+          exposure: 1.0,
+          environmentImage: 'neutral',
+          shadowIntensity: 0.5,
+          shadowSoftness: 1,
+          backgroundColor: const Color(0xFF0B0F17),
+        ),
+      ),
     );
   }
 }
@@ -730,12 +819,12 @@ class _CarMapState extends State<_CarMap> {
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.5)),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.navigation, color: const Color(0xFF4CC3FF), size: 20),
-                    const SizedBox(width: 10),
-                    const Text(
+                    Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 20),
+                    SizedBox(width: 10),
+                    Text(
                       'GPS TRACKING — OFFLINE MODE',
                       style: TextStyle(
                         color: Color(0xFFB0BEC5),
