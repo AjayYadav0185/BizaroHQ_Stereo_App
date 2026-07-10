@@ -8,8 +8,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as latlong;
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'media_channel.dart';
+import 'tile_cache.dart';
 
 /// Premium Car Stereo Launcher with animated UI.
 void main() {
@@ -59,6 +61,10 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   latlong.LatLng? _destination;
   List<latlong.LatLng> _routePoints = [];
 
+  // Connectivity
+  bool _isOnline = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
   // Global key to access map state
   final GlobalKey<_CarMapState> _mapKey = GlobalKey<_CarMapState>();
 
@@ -72,7 +78,19 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() => _now = DateTime.now());
     });
+    _startConnectivityMonitoring();
     _startLocation();
+  }
+
+  Future<void> _startConnectivityMonitoring() async {
+    // Check initial state
+    final results = await Connectivity().checkConnectivity();
+    setState(() => _isOnline = !results.contains(ConnectivityResult.none));
+
+    // Listen for changes
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      setState(() => _isOnline = !results.contains(ConnectivityResult.none));
+    });
   }
 
   Future<void> _startLocation() async {
@@ -103,7 +121,9 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   Future<void> _centerOnCurrentLocation() async {
     try {
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       final newCenter = latlong.LatLng(position.latitude, position.longitude);
       setState(() {
@@ -117,8 +137,11 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
 
   void _setDestination(latlong.LatLng point) async {
     setState(() => _destination = point);
-    if (_locationReady) {
+    if (_locationReady && _isOnline) {
       await _fetchRoute(_mapCenter, point);
+    } else if (!_isOnline) {
+      // Offline: show destination marker but no route line
+      setState(() => _routePoints = []);
     }
   }
 
@@ -143,6 +166,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   void dispose() {
     _clockTimer?.cancel();
     _posSub?.cancel();
+    _connectivitySub?.cancel();
     super.dispose();
   }
 
@@ -206,9 +230,40 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                         locationReady: _locationReady,
                         destination: _destination,
                         routePoints: _routePoints,
+                        isOnline: _isOnline,
                         onMapTap: _setDestination,
                       ),
                     ),
+                    // Offline badge
+                    if (!_isOnline)
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFFF9800), width: 1),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.wifi_off, color: Color(0xFFFF9800), size: 16),
+                              SizedBox(width: 6),
+                              Text(
+                                'OFFLINE',
+                                style: TextStyle(
+                                  color: Color(0xFFFF9800),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     Positioned(
                       right: 16,
                       bottom: 16,
@@ -221,7 +276,11 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                     Positioned(
                       top: 16,
                       left: 16,
-                      child: _DestinationBanner(destination: _destination, isLocationReady: _locationReady),
+                      child: _DestinationBanner(
+                        destination: _destination,
+                        isLocationReady: _locationReady,
+                        isOnline: _isOnline,
+                      ),
                     ),
                   ],
                 ),
@@ -495,40 +554,62 @@ class _CircularBtn extends StatelessWidget {
 class _DestinationBanner extends StatelessWidget {
   final latlong.LatLng? destination;
   final bool isLocationReady;
+  final bool isOnline;
 
-  const _DestinationBanner({required this.destination, required this.isLocationReady});
+  const _DestinationBanner({
+    required this.destination,
+    required this.isLocationReady,
+    required this.isOnline,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final Color bannerColor = !isLocationReady || destination != null
-        ? const Color(0xFFFF5252)
-        : const Color(0xFF4CC3FF);
+    final String message;
+    final Color bgColor;
+
+    if (!isLocationReady) {
+      message = 'ALLOW LOCATION PERMISSION';
+      bgColor = const Color(0xFFFF5252).withValues(alpha: 0.9);
+    } else if (!isOnline && destination != null) {
+      message = 'OFFLINE — ROUTE UNAVAILABLE';
+      bgColor = const Color(0xFFFF9800).withValues(alpha: 0.9);
+    } else if (!isOnline) {
+      message = 'OFFLINE — CACHED MAPS & GPS ACTIVE';
+      bgColor = const Color(0xFFFF9800).withValues(alpha: 0.9);
+    } else if (destination != null) {
+      message = 'DEST: ${destination!.latitude.toStringAsFixed(4)}, ${destination!.longitude.toStringAsFixed(4)}';
+      bgColor = const Color(0xFFFF5252).withValues(alpha: 0.9);
+    } else {
+      message = 'TAP MAP TO SELECT DESTINATION';
+      bgColor = const Color(0xFF4CC3FF).withValues(alpha: 0.85);
+    }
+
+    final Color iconColor = bgColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: (!isLocationReady || destination != null)
-            ? const Color(0xFFFF5252).withValues(alpha: 0.9)
-            : const Color(0xFF4CC3FF).withValues(alpha: 0.85),
+        color: bgColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: bannerColor.withValues(alpha: 0.5), blurRadius: 12)],
+        boxShadow: [BoxShadow(color: bgColor.withValues(alpha: 0.5), blurRadius: 12)],
       ),
       child: Row(
         children: [
           Icon(
             !isLocationReady
                 ? Icons.warning
-                : destination != null ? Icons.location_on : Icons.touch_app,
-            color: Colors.white,
+                : !isOnline
+                    ? Icons.wifi_off
+                    : destination != null
+                        ? Icons.location_on
+                        : Icons.touch_app,
+            color: iconColor,
             size: 18,
           ),
           const SizedBox(width: 8),
           Text(
-            !isLocationReady
-                ? 'ALLOW LOCATION PERMISSION'
-                : destination != null
-                    ? 'DEST: ${destination!.latitude.toStringAsFixed(4)}, ${destination!.longitude.toStringAsFixed(4)}'
-                    : 'TAP MAP TO SELECT DESTINATION',
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+            message,
+            style: TextStyle(color: iconColor, fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -536,15 +617,24 @@ class _DestinationBanner extends StatelessWidget {
   }
 }
 
-/// Interactive map.
+/// Interactive map with offline awareness.
 class _CarMap extends StatefulWidget {
   final latlong.LatLng center;
   final bool locationReady;
   final latlong.LatLng? destination;
   final List<latlong.LatLng> routePoints;
+  final bool isOnline;
   final Function(latlong.LatLng)? onMapTap;
 
-  const _CarMap({super.key, required this.center, required this.locationReady, this.destination, required this.routePoints, this.onMapTap});
+  const _CarMap({
+    super.key,
+    required this.center,
+    required this.locationReady,
+    this.destination,
+    required this.routePoints,
+    required this.isOnline,
+    this.onMapTap,
+  });
 
   @override
   State<_CarMap> createState() => _CarMapState();
@@ -569,26 +659,71 @@ class _CarMapState extends State<_CarMap> {
 
   @override
   Widget build(BuildContext context) {
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: widget.center,
-        initialZoom: 16.5,
-        interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
-        onTap: (tapPosition, point) => widget.onMapTap?.call(point),
-      ),
+    return Stack(
       children: [
-        TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.carapp.launcher'),
-        if (widget.routePoints.isNotEmpty)
-          PolylineLayer(polylines: [
-            Polyline(points: widget.routePoints, color: const Color(0xFF4CC3FF), strokeWidth: 5),
-          ]),
-        if (widget.locationReady)
-          MarkerLayer(markers: [
-            Marker(point: widget.center, width: 44, height: 44, child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44)),
-            if (widget.destination != null)
-              Marker(point: widget.destination!, width: 38, height: 38, child: const Icon(Icons.location_on, color: Color(0xFFFF5252), size: 38)),
-          ]),
+        // Map layer (tiles will show if online, be blank if offline — handled gracefully)
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: widget.center,
+            initialZoom: 16.5,
+            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+            onTap: (tapPosition, point) => widget.onMapTap?.call(point),
+          ),
+          children: [
+            // CachedTileProvider handles online/offline seamlessly:
+            // - Online: downloads tiles and caches them to disk
+            // - Offline: serves previously cached tiles from disk
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.carapp.launcher',
+              tileProvider: CachedTileProvider(),
+            ),
+            if (widget.routePoints.isNotEmpty)
+              PolylineLayer(polylines: [
+                Polyline(points: widget.routePoints, color: const Color(0xFF4CC3FF), strokeWidth: 5),
+              ]),
+            if (widget.locationReady)
+              MarkerLayer(markers: [
+                Marker(point: widget.center, width: 44, height: 44, child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44)),
+                if (widget.destination != null)
+                  Marker(point: widget.destination!, width: 38, height: 38, child: const Icon(Icons.location_on, color: Color(0xFFFF5252), size: 38)),
+              ]),
+          ],
+        ),
+        // Offline overlay — GPS tracking is still active, cached tiles will show
+        if (!widget.isOnline && widget.locationReady)
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.navigation, color: const Color(0xFF4CC3FF), size: 20),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'GPS TRACKING — OFFLINE MODE',
+                      style: TextStyle(
+                        color: Color(0xFFB0BEC5),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
