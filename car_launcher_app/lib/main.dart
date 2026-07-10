@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -186,129 +187,252 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Row(
-          children: [
-            // Left Column - Premium widgets
-            Flexible(
-              flex: 4,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0A0E17), Color(0xFF0F1722)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _PremiumClockBlock(timeText: _timeFmt.format(_now), dateText: _dateFmt.format(_now)),
-                      const SizedBox(height: 16),
-                      _RotatingCar3D(),
-                      const SizedBox(height: 16),
-                      _PremiumSpeedometer(speedKmh: _speedKmh),
-                      const SizedBox(height: 16),
-                      _PremiumMediaCard(
-                        onPrevious: MediaChannel.previous,
-                        onToggle: MediaChannel.playPauseToggle,
-                        onNext: MediaChannel.next,
-                      ),
-                      const SizedBox(height: 16),
-                      // Location status and center button with auto-center toggle
-                      _LocationCard(
-                        isReady: _locationReady,
-                        center: _mapCenter,
-                        autoCenterEnabled: _autoCenterMap,
-                        onAutoCenterChanged: _toggleAutoCenter,
-                        onCenterPressed: _centerOnCurrentLocation,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // Right Column - Map
-            Flexible(
-              flex: 6,
-              child: Container(
-                color: const Color(0xFF05070C),
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      child: _CarMap(
-                        key: _mapKey,
-                        center: _mapCenter,
-                        locationReady: _locationReady,
-                        destination: _destination,
-                        routePoints: _routePoints,
-                        isOnline: _isOnline,
-                        onMapTap: _setDestination,
+      body: Stack(
+        children: [
+          // Glassmorphism backdrop with soft glowing blobs
+          const Positioned.fill(child: _BackgroundBlobs()),
+          SafeArea(
+            child: Row(
+              children: [
+                // Left Column - Premium glass widgets
+                Flexible(
+                  flex: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _PremiumClockBlock(timeText: _timeFmt.format(_now), dateText: _dateFmt.format(_now)),
+                          const SizedBox(height: 16),
+                          _RotatingCar3D(),
+                          const SizedBox(height: 16),
+                          _GlassContainer(
+                            tint: const Color(0xFF9B8CFF),
+                            child: _PremiumSpeedometer(speedKmh: _speedKmh),
+                          ),
+                          const SizedBox(height: 16),
+                          _GlassContainer(
+                            tint: const Color(0xFF4CC3FF),
+                            child: _PremiumMediaCard(
+                              onPrevious: MediaChannel.previous,
+                              onToggle: MediaChannel.playPauseToggle,
+                              onNext: MediaChannel.next,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _GlassContainer(
+                            tint: const Color(0xFF91E0C0),
+                            child: _LocationCard(
+                              isReady: _locationReady,
+                              center: _mapCenter,
+                              autoCenterEnabled: _autoCenterMap,
+                              onAutoCenterChanged: _toggleAutoCenter,
+                              onCenterPressed: _centerOnCurrentLocation,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    // Offline badge
-                    if (!_isOnline)
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFFF9800), width: 1),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.wifi_off, color: Color(0xFFFF9800), size: 16),
-                              SizedBox(width: 6),
-                              Text(
-                                'OFFLINE',
-                                style: TextStyle(
-                                  color: Color(0xFFFF9800),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ],
+                  ),
+                ),
+                // Right Column - Map
+                Flexible(
+                  flex: 6,
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(24),
+                          bottomLeft: Radius.circular(24),
+                        ),
+                        child: _CarMap(
+                            key: _mapKey,
+                            center: _mapCenter,
+                            locationReady: _locationReady,
+                            destination: _destination,
+                            routePoints: _routePoints,
+                            isOnline: _isOnline,
+                            onMapTap: _setDestination,
                           ),
                         ),
-                      ),
-                    Positioned(
-                      right: 16,
-                      bottom: 16,
-                      child: _MapControls(
-                        onZoomIn: () => _mapKey.currentState?.zoomIn(),
-                        onZoomOut: () => _mapKey.currentState?.zoomOut(),
-                        onMyLocation: _centerOnCurrentLocation,
-                      ),
+                        // Offline badge
+                        if (!_isOnline)
+                          Positioned(
+                            top: 16,
+                            right: 16,
+                            child: _GlassContainer(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              borderRadius: 20,
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.wifi_off, color: Color(0xFFFF9800), size: 16),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'OFFLINE',
+                                    style: TextStyle(
+                                      color: Color(0xFFFF9800),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          right: 16,
+                          bottom: 16,
+                          child: _GlassContainer(
+                            padding: const EdgeInsets.all(8),
+                            borderRadius: 18,
+                            child: _MapControls(
+                              onZoomIn: () => _mapKey.currentState?.zoomIn(),
+                              onZoomOut: () => _mapKey.currentState?.zoomOut(),
+                              onMyLocation: _centerOnCurrentLocation,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 16,
+                          left: 16,
+                          child: _GlassContainer(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            borderRadius: 22,
+                            child: _DestinationBanner(
+                              destination: _destination,
+                              isLocationReady: _locationReady,
+                              isOnline: _isOnline,
+                              onClear: () => setState(() {
+                                _destination = null;
+                                _routePoints = [];
+                              }),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      child: _DestinationBanner(
-                        destination: _destination,
-                        isLocationReady: _locationReady,
-                        isOnline: _isOnline,
-                        onClear: () => setState(() {
-                          _destination = null;
-                          _routePoints = [];
-                        }),
-                      ),
-                    ),
-                  ],
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reusable glassmorphism container (frosted glass effect).
+class _GlassContainer extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double borderRadius;
+  final double blur;
+  final Color tint;
+
+  const _GlassContainer({
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.borderRadius = 20,
+    this.blur = 18,
+    this.tint = const Color(0xFF4CC3FF),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: tint.withValues(alpha: 0.18),
+                blurRadius: 26,
+                spreadRadius: 1,
+              ),
+            ],
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withValues(alpha: 0.12),
+                Colors.white.withValues(alpha: 0.02),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Decorative animated-style background blobs for the glassmorphism backdrop.
+class _BackgroundBlobs extends StatelessWidget {
+  const _BackgroundBlobs();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF070A14), Color(0xFF0B1020)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -60,
+            left: -40,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x554CC3FF), Color(0x00000000)],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          Positioned(
+            bottom: -80,
+            right: -30,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x559B8CFF), Color(0x00000000)],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 140,
+            right: 70,
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x3391E0C0), Color(0x00000000)],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -328,11 +452,6 @@ class _LocationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0F17),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF4CC3FF)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -445,41 +564,90 @@ class _PremiumClockBlock extends StatelessWidget {
   }
 }
 
-/// Premium 3D rotating car model.
-class _RotatingCar3D extends StatelessWidget {
+/// Premium 3D rotating car model that continuously rotates and floats.
+class _RotatingCar3D extends StatefulWidget {
   const _RotatingCar3D();
 
   @override
+  State<_RotatingCar3D> createState() => _RotatingCar3DState();
+}
+
+class _RotatingCar3DState extends State<_RotatingCar3D>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _floatController;
+  late final Animation<double> _floatAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(reverse: true);
+    _floatAnimation = Tween<double>(begin: -8, end: 8).animate(
+      CurvedAnimation(parent: _floatController, curve: Curves.easeInOutSine),
+    );
+  }
+
+  @override
+  void dispose() {
+    _floatController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 180,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0F17),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF4CC3FF), width: 1.5),
-        boxShadow: const [
-          BoxShadow(color: Color(0x334CC3FF), blurRadius: 15),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18.5),
-        child: ModelViewer(
-          src: 'assets/models/car.glb',
-          alt: 'Rotating 3D Car Model',
-          ar: false,
-          autoRotate: true,
-          autoRotateDelay: 0,
-          rotationPerSecond: '20deg',
-          cameraControls: false,
-          disableZoom: true,
-          disablePan: true,
-          disableTap: true,
-          exposure: 1.0,
-          environmentImage: 'neutral',
-          shadowIntensity: 0.5,
-          shadowSoftness: 1,
-          backgroundColor: const Color(0xFF0B0F17),
+    return _GlassContainer(
+      padding: EdgeInsets.zero,
+      borderRadius: 20,
+      child: SizedBox(
+        height: 180,
+        width: double.infinity,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Soft glow behind the model
+            Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [Color(0x3391E0C0), Color(0x00000000)],
+                ),
+              ),
+            ),
+            // Floating + continuously rotating model
+            AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatAnimation.value),
+                  child: child,
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18.5),
+                child: ModelViewer(
+                  src: 'assets/models/car.glb',
+                  alt: 'Rotating 3D Car Model',
+                  ar: false,
+                  autoRotate: true,
+                  autoRotateDelay: 0,
+                  rotationPerSecond: '24deg',
+                  cameraControls: false,
+                  disableZoom: true,
+                  disablePan: true,
+                  disableTap: true,
+                  exposure: 1.1,
+                  environmentImage: 'neutral',
+                  shadowIntensity: 0.5,
+                  shadowSoftness: 1,
+                  backgroundColor: const Color(0x00000000),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -498,17 +666,6 @@ class _PremiumSpeedometer extends StatelessWidget {
     
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const RadialGradient(
-          colors: [Color(0xFF0B0F17), Color(0xFF05070C)],
-          center: Alignment.center,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF4CC3FF), width: 2),
-        boxShadow: const [
-          BoxShadow(color: Color(0x334CC3FF), blurRadius: 20, spreadRadius: 2),
-        ],
-      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
@@ -537,12 +694,6 @@ class _PremiumMediaCard extends StatelessWidget {
     
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0F17),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: primary),
-        boxShadow: const [BoxShadow(color: Color(0x334CC3FF), blurRadius: 15)],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
