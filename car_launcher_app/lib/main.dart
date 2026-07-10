@@ -202,14 +202,24 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
-                          _PremiumClockBlock(timeText: _timeFmt.format(_now), dateText: _dateFmt.format(_now)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _GlassContainer(
+                                  child: _PremiumClockBlock(timeText: _timeFmt.format(_now), dateText: _dateFmt.format(_now)),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _GlassContainer(
+                                  tint: const Color(0xFF9B8CFF),
+                                  child: _PremiumSpeedometer(speedKmh: _speedKmh),
+                                ),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 16),
                           _RotatingCar3D(),
-                          const SizedBox(height: 16),
-                          _GlassContainer(
-                            tint: const Color(0xFF9B8CFF),
-                            child: _PremiumSpeedometer(speedKmh: _speedKmh),
-                          ),
                           const SizedBox(height: 16),
                           _GlassContainer(
                             tint: const Color(0xFF4CC3FF),
@@ -670,10 +680,10 @@ class _PremiumSpeedometer extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('SPEED', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 3)),
+          // const Text('SPEED', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 3)),
           const SizedBox(height: 8),
           Text('$intSpeed', style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, color: Color(0xFFEFF6FF), letterSpacing: 1)),
-          const Text('KM/H', style: TextStyle(color: Color(0xFF90A4AE), fontSize: 14, fontWeight: FontWeight.w600)),
+          const Text('SPEED - KM/H', style: TextStyle(color: Color(0xFF90A4AE), fontSize: 14, fontWeight: FontWeight.w600)),
         ],
       ),
     );
