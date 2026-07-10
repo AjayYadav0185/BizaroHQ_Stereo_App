@@ -59,6 +59,9 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   latlong.LatLng? _destination;
   List<latlong.LatLng> _routePoints = [];
 
+  // Global key to access map state
+  final GlobalKey<_CarMapState> _mapKey = GlobalKey<_CarMapState>();
+
   @override
   void initState() {
     super.initState();
@@ -96,16 +99,20 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     } catch (_) {}
   }
 
-  /// Get current location on demand
-  Future<latlong.LatLng?> _getCurrentLocation() async {
+  /// Get current location on demand and center map
+  Future<void> _centerOnCurrentLocation() async {
     try {
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      return latlong.LatLng(position.latitude, position.longitude);
-    } catch (_) {
-      return null;
-    }
+      final newCenter = latlong.LatLng(position.latitude, position.longitude);
+      setState(() {
+        _mapCenter = newCenter;
+        _locationReady = true;
+      });
+      // Center the map using the global key
+      _mapKey.currentState?.centerOnLocation();
+    } catch (_) {}
   }
 
   void _setDestination(latlong.LatLng point) async {
@@ -174,18 +181,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                       _LocationCard(
                         isReady: _locationReady,
                         center: _mapCenter,
-                        onCenterPressed: () async {
-                          final pos = await _getCurrentLocation();
-                          if (pos != null && mounted) {
-                            setState(() {
-                              _mapCenter = pos;
-                              _locationReady = true;
-                            });
-                            // Find the CarMap state and center it
-                            final state = context.findAncestorStateOfType<_CarMapState>();
-                            state?.centerOnLocation();
-                          }
-                        },
+                        onCenterPressed: _centerOnCurrentLocation,
                       ),
                     ],
                   ),
@@ -205,6 +201,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                         bottomRight: Radius.circular(16),
                       ),
                       child: _CarMap(
+                        key: _mapKey,
                         center: _mapCenter,
                         locationReady: _locationReady,
                         destination: _destination,
@@ -216,9 +213,9 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                       right: 16,
                       bottom: 16,
                       child: _MapControls(
-                        onZoomIn: () {},
-                        onZoomOut: () {},
-                        onMyLocation: () {},
+                        onZoomIn: () => _mapKey.currentState?.zoomIn(),
+                        onZoomOut: () => _mapKey.currentState?.zoomOut(),
+                        onMyLocation: _centerOnCurrentLocation,
                       ),
                     ),
                     Positioned(
@@ -560,11 +557,6 @@ class _CarMapState extends State<_CarMap> {
   void initState() {
     super.initState();
     _mapController = MapController();
-  }
-
-  @override
-  void didUpdateWidget(covariant _CarMap oldWidget) {
-    super.didUpdateWidget(oldWidget);
   }
 
   void zoomIn() => _mapController.move(_mapController.camera.center, _mapController.camera.zoom + 1);
