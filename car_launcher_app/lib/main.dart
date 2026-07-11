@@ -640,6 +640,11 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
   late final AnimationController _floatController;
   late final Animation<double> _floatAnimation;
 
+  // Embedded base64 data URI of the GLB. Loading it this way (instead of the
+  // plugin's loopback HTTP proxy) guarantees the 3D model renders fully
+  // offline with zero network dependency.
+  String? _modelDataUri;
+
   @override
   void initState() {
     super.initState();
@@ -650,6 +655,22 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
     _floatAnimation = Tween<double>(begin: -8, end: 8).animate(
       CurvedAnimation(parent: _floatController, curve: Curves.easeInOutSine),
     );
+    _loadModelOffline();
+  }
+
+  /// Read the bundled GLB and embed it as a base64 data URI so the model is
+  /// served directly to the <model-viewer> element with no network/proxy call.
+  Future<void> _loadModelOffline() async {
+    try {
+      final ByteData bytes = await rootBundle.load('assets/models/car.glb');
+      final String b64 = base64Encode(bytes.buffer.asUint8List());
+      if (mounted) {
+        setState(() => _modelDataUri = 'data:model/gltf-binary;base64,$b64');
+      }
+    } catch (_) {
+      // If embedding fails, fall back to the standard asset path.
+      if (mounted) setState(() => _modelDataUri = 'assets/models/car.glb');
+    }
   }
 
   @override
@@ -690,23 +711,29 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
                 );
               },
               child: ClipRRect(
-                child: ModelViewer(
-                  src: 'assets/models/car.glb',
-                  alt: 'Rotating 3D Car Model',
-                  ar: false,
-                  autoRotate: true,
-                  autoRotateDelay: 0,
-                  rotationPerSecond: '24deg',
-                  cameraControls: false,
-                  disableZoom: true,
-                  disablePan: true,
-                  disableTap: true,
-                  exposure: 1.1,
-                  environmentImage: 'neutral',
-                  shadowIntensity: 0.5,
-                  shadowSoftness: 1,
-                  backgroundColor: const Color(0x00000000),
-                ),
+                child: _modelDataUri == null
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          semanticsLabel: 'Loading 3D Model',
+                        ),
+                      )
+                    : ModelViewer(
+                        src: _modelDataUri!,
+                        alt: 'Rotating 3D Car Model',
+                        ar: false,
+                        autoRotate: true,
+                        autoRotateDelay: 0,
+                        rotationPerSecond: '24deg',
+                        cameraControls: false,
+                        disableZoom: true,
+                        disablePan: true,
+                        disableTap: true,
+                        exposure: 1.1,
+                        environmentImage: 'neutral',
+                        shadowIntensity: 0.5,
+                        shadowSoftness: 1,
+                        backgroundColor: const Color(0x00000000),
+                      ),
               ),
             ),
           ],
