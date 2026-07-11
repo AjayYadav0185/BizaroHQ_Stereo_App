@@ -1,7 +1,6 @@
 package com.example.car_launcher_app
 
 import android.Manifest
-import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -22,7 +21,7 @@ import io.flutter.plugin.common.MethodChannel
 /**
  * Native Android host for the Flutter car stereo launcher.
  *
- * Production-ready implementation for Android head units.
+ * Production-ready implementation for Android head units (API 24+ / Android 7+).
  *
  * Key Features:
  * - singleInstance mode for seamless home launcher behavior
@@ -31,6 +30,8 @@ import io.flutter.plugin.common.MethodChannel
  * - Targets the active Bluetooth (A2DP) media session directly via MediaSessionManager
  *   so the hardware-style buttons reliably control Spotify / YouTube Music / etc.
  *   playing on the connected car stereo, with AudioManager fallback.
+ * - Synchronous Bluetooth A2DP connection detection (fixes async getProfileProxy bug)
+ * - Proper API level guards for Android 8-10 (API 26-30) compatibility
  *
  * The MethodChannel 'com.carapp.media/control' handles:
  * - mediaPrevious: Skip to previous track
@@ -66,12 +67,13 @@ class MainActivity : FlutterActivity() {
         // permission and MUST be granted at runtime, not just declared in the
         // manifest. Request it so the media card can read the A2DP state
         // without throwing a fatal SecurityException.
+        // On Android 8-10 (API 26-30) this permission is not needed at runtime.
         requestBluetoothPermission()
     }
 
     /**
      * Returns true if we are allowed to access Bluetooth connection info.
-     * On older APIs the permission is not required at runtime.
+     * On Android 8-10 (API < 31) the permission is not required at runtime.
      */
     private fun hasBluetoothConnectPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
@@ -217,27 +219,57 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Returns true when a Bluetooth A2DP (audio) device is currently connected.
+     *
+     * FIXED: Uses synchronous getProfileConnectionState() instead of the broken
+     * async getProfileProxy() approach. getProfileConnectionState() is available
+     * from API 14+ (Android 4.0+) and returns the connection state immediately.
+     *
+     * For Android 8-10 (API 26-30): BLUETOOTH_CONNECT permission is not required,
+     * so this works without runtime permission grants.
      */
     private fun isBluetoothA2dpConnected(): Boolean {
         if (!hasBluetoothConnectPermission()) return false
         val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
         if (!adapter.isEnabled) return false
-        var connected = false
-        try {
+        return try {
+            // Synchronous check - works on API 14+ (all supported Android versions)
+            val state = adapter.getProfileConnectionState(BluetoothProfile.A2DP)
+            state == BluetoothProfile.STATE_CONNECTED
+        } catch (_: Throwable) {
+            // Fallback: try the async method for edge cases
+            fallbackBluetoothCheck()
+        }
+    }
+
+    /**
+     * Fallback Bluetooth check using the async profile proxy approach.
+     * This is only reached if the synchronous method throws an exception.
+     */
+    private fun fallbackBluetoothCheck(): Boolean {
+        return try {
+            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
+            if (!adapter.isEnabled) return false
+            var connected = false
+            val latch = java.util.concurrent.CountDownLatch(1)
             val profileListener = object : BluetoothProfile.ServiceListener {
                 override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
                     if (profile == BluetoothProfile.A2DP) {
                         connected = proxy.connectedDevices.isNotEmpty()
                     }
+                    latch.countDown()
                 }
 
-                override fun onServiceDisconnected(profile: Int) {}
+                override fun onServiceDisconnected(profile: Int) {
+                    latch.countDown()
+                }
             }
             adapter.getProfileProxy(this, profileListener, BluetoothProfile.A2DP)
+            // Wait up to 2 seconds for the async callback
+            latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+            connected
         } catch (_: Throwable) {
-            // ignore – assume not connected
+            false
         }
-        return connected
     }
 
     /**
@@ -286,6 +318,9 @@ class MainActivity : FlutterActivity() {
      * Reads the current track metadata (title/artist) from the active media
      * session, preferring the Bluetooth/remote player. Returns a map that the
      * Flutter UI uses for the scrolling "now playing" marquee.
+     *
+     * On Android 8-10 (API 26-30): Works without BLUETOOTH_CONNECT permission
+     * since MediaSessionManager.getActiveSessions() is available from API 21+.
      */
     private fun getNowPlaying(sessionManager: MediaSessionManager): Map<String, String> {
         if (!hasBluetoothConnectPermission()) return mapOf("title" to "", "artist" to "")

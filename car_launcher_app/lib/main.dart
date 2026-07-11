@@ -61,7 +61,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
 
   latlong.LatLng _mapCenter = const latlong.LatLng(37.4219999, -122.0840575);
   bool _locationReady = false;
-  bool _autoCenterMap = true; // Toggle for auto-centering on live location
+  bool _autoCenterMap = true;
   latlong.LatLng? _destination;
   List<latlong.LatLng> _routePoints = [];
 
@@ -80,6 +80,9 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
   // Global key to access map state
   final GlobalKey<_CarMapState> _mapKey = GlobalKey<_CarMapState>();
 
+  // Media polling timer (replaces doWhile for reliable scheduling)
+  Timer? _mediaPollTimer;
+
   @override
   void initState() {
     super.initState();
@@ -97,16 +100,20 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
 
   /// Poll Bluetooth A2DP connection + now-playing metadata so the media card
   /// reflects the connected device and current track in real time.
+  /// Uses a periodic Timer instead of doWhile for more reliable scheduling.
   Future<void> _startBluetoothMonitoring() async {
     await MediaChannel.requestBluetoothPermission();
+    // Perform initial refresh
     await _refreshBluetooth();
     await _refreshNowPlaying();
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 3));
-      if (!mounted) return false;
+    // Schedule periodic polling (every 2 seconds for responsive UI)
+    _mediaPollTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted) {
+        _mediaPollTimer?.cancel();
+        return;
+      }
       await _refreshBluetooth();
       await _refreshNowPlaying();
-      return true;
     });
   }
 
@@ -230,6 +237,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     _clockTimer?.cancel();
     _posSub?.cancel();
     _connectivitySub?.cancel();
+    _mediaPollTimer?.cancel();
     super.dispose();
   }
 
@@ -659,7 +667,7 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
   }
 
   /// Read the bundled GLB and embed it as a base64 data URI so the model is
-  /// served directly to the <model-viewer> element with no network/proxy call.
+  /// served directly to the `model-viewer` element with no network/proxy call.
   Future<void> _loadModelOffline() async {
     try {
       final ByteData bytes = await rootBundle.load('assets/models/car.glb');
@@ -759,7 +767,6 @@ class _PremiumSpeedometer extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // const Text('SPEED', style: TextStyle(color: Color(0xFF7AA6B9), fontWeight: FontWeight.w800, letterSpacing: 3)),
           const SizedBox(height: 8),
           Text('$intSpeed', style: const TextStyle(fontSize: 56, fontWeight: FontWeight.w900, color: Color(0xFFEFF6FF), letterSpacing: 1)),
           const Text('SPEED - KM/H', style: TextStyle(color: Color(0xFF90A4AE), fontSize: 14, fontWeight: FontWeight.w600)),
@@ -946,12 +953,10 @@ class _PremiumMediaCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // Left side: volume down
               Expanded(child: _MediaBtn(icon: Icons.volume_down_rounded, label: 'VOL -', color: primary, onPressed: onVolumeDown)),
               Expanded(child: _MediaBtn(icon: Icons.skip_previous_rounded, label: 'PREV', color: primary, onPressed: onPrevious)),
               Expanded(child: _MediaBtn(icon: Icons.play_arrow_rounded, label: 'PLAY', color: primary, isPrimary: true, onPressed: onToggle)),
               Expanded(child: _MediaBtn(icon: Icons.skip_next_rounded, label: 'NEXT', color: primary, onPressed: onNext)),
-              // Right side: volume up
               Expanded(child: _MediaBtn(icon: Icons.volume_up_rounded, label: 'VOL +', color: primary, onPressed: onVolumeUp)),
             ],
           ),
@@ -1108,7 +1113,6 @@ class _DestinationBanner extends StatelessWidget {
               style: TextStyle(color: iconColor, fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
-          // Show a clear button when a destination is set
           if (destination != null) ...[
             const SizedBox(width: 8),
             GestureDetector(
@@ -1188,7 +1192,6 @@ class _CarMapState extends State<_CarMap> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Map layer (tiles will show if online, be blank if offline — handled gracefully)
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
@@ -1199,9 +1202,6 @@ class _CarMapState extends State<_CarMap> {
             onTap: (tapPosition, point) => widget.onMapTap?.call(point),
           ),
           children: [
-            // CachedTileProvider handles online/offline seamlessly:
-            // - Online: downloads tiles and caches them to disk
-            // - Offline: serves previously cached tiles from disk
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.carapp.launcher',
@@ -1217,10 +1217,6 @@ class _CarMapState extends State<_CarMap> {
                   point: widget.center,
                   width: 44,
                   height: 44,
-                  // Icons.navigation points to the upper-right; rotate -45° so
-                  // its tip points "up" in map space. Since the map itself is
-                  // rotated to the travel heading, the arrow then shows the
-                  // direction of travel on screen.
                   child: Transform.rotate(
                     angle: -pi / 4,
                     child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44),
@@ -1231,7 +1227,6 @@ class _CarMapState extends State<_CarMap> {
               ]),
           ],
         ),
-        // Offline overlay — GPS tracking is still active, cached tiles will show
         if (!widget.isOnline && widget.locationReady)
           Positioned(
             bottom: 80,

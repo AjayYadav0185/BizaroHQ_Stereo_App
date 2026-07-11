@@ -12,14 +12,19 @@
     <!-- Internet permission for WebView (FASTag integration) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- BLUETOOTH_CONNECT and BLUETOOTH_SCAN are only available on API 31+ (Android 12+).
+         Using maxSdkVersion="32" ensures they don't cause install issues on Android 8-10 (API 26-30).
+         On older devices, the app uses the traditional BLUETOOTH permission instead. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required for WebView on Android 8-10 to properly render 3D models -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:label="Car Stereo Launcher"
