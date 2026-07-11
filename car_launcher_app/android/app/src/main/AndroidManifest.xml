@@ -25,7 +25,8 @@
         android:label="Car Stereo Launcher"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
-        android:hardwareAccelerated="true">
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
