@@ -2,7 +2,7 @@
     package="com.example.car_launcher_app">
 
     <!--
-    Car Stereo Launcher - Production Configuration
+    BizaroHQ Stereo - Production Configuration
     ============================================
 
     This manifest configures the app as a system home launcher for
@@ -27,7 +27,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
-        android:label="Car Stereo Launcher"
+        android:label="BizaroHQ Stereo"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:hardwareAccelerated="true"

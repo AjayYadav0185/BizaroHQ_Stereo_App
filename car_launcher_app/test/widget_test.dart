@@ -1,4 +1,4 @@
-// Widget tests for Car Stereo Launcher.
+// Widget tests for BizaroHQ Stereo.
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:car_stereo_launcher/main.dart';

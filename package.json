@@ -1,7 +1,7 @@
 {
   "name": "bizarohq-stereo-download",
   "version": "1.0.0",
-  "description": "Car Stereo Launcher APK Download Page",
+  "description": "BizaroHQ Stereo APK Download Page",
   "main": "index.html",
   "scripts": {
     "start": "npx serve ."

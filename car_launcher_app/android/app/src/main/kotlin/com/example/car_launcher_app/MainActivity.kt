@@ -19,7 +19,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Native Android host for the Flutter car stereo launcher.
+ * Native Android host for the Flutter BizaroHQ Stereo.
  *
  * Production-ready implementation for Android head units (API 24+ / Android 7+).
  *

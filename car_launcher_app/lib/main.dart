@@ -16,7 +16,7 @@ import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'media_channel.dart';
 import 'tile_cache.dart';
 
-/// Premium Car Stereo Launcher with animated UI.
+/// Premium BizaroHQ Stereo with animated UI.
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Car Stereo Launcher',
+      title: 'BizaroHQ Stereo',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF070A0F),
         colorScheme: const ColorScheme.dark(
