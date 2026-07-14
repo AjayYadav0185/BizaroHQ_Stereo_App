@@ -11,7 +11,6 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import 'media_channel.dart';
 import 'tile_cache.dart';
@@ -635,7 +634,154 @@ class _PremiumClockBlock extends StatelessWidget {
   }
 }
 
-/// Premium 3D rotating car model that continuously rotates and floats.
+/// Premium animated location marker with a pulsing ring and rotating direction
+/// arrow. The outer ring pulses to indicate live GPS tracking, and the inner
+/// arrow rotates to match the current heading.
+class _PremiumLocationMarker extends StatefulWidget {
+  final double heading;
+
+  const _PremiumLocationMarker({required this.heading});
+
+  @override
+  State<_PremiumLocationMarker> createState() => _PremiumLocationMarkerState();
+}
+
+class _PremiumLocationMarkerState extends State<_PremiumLocationMarker>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOutSine),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        final scale = 0.6 + (_pulseAnimation.value * 0.4);
+        final opacity = 1.0 - (_pulseAnimation.value * 0.6);
+        return SizedBox(
+          width: 80,
+          height: 80,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF4CC3FF).withValues(alpha: opacity * 0.25),
+                    border: Border.all(
+                      color: const Color(0xFF4CC3FF).withValues(alpha: opacity * 0.6),
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF4CC3FF).withValues(alpha: 0.2),
+                ),
+              ),
+              Transform.rotate(
+                angle: widget.heading * pi / 180,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF4CC3FF),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0xFF4CC3FF),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.navigation,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Premium destination pin marker with a drop shadow effect.
+class _DestinationMarker extends StatelessWidget {
+  const _DestinationMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFFF5252).withValues(alpha: 0.15),
+              border: Border.all(
+                color: const Color(0xFFFF5252).withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+            ),
+          ),
+          const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.location_on,
+                color: Color(0xFFFF5252),
+                size: 40,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Premium animated car widget that renders entirely with Flutter's canvas,
+/// eliminating the WebView dependency that causes 3D models to fail on many
+/// Android head units with outdated WebView/WebGL support.
+///
+/// Features a glowing gradient car silhouette with floating animation and
+/// subtle headlight/tail-light glow pulses.
 class _RotatingCar3D extends StatefulWidget {
   const _RotatingCar3D();
 
@@ -646,12 +792,9 @@ class _RotatingCar3D extends StatefulWidget {
 class _RotatingCar3DState extends State<_RotatingCar3D>
     with SingleTickerProviderStateMixin {
   late final AnimationController _floatController;
+  late final AnimationController _glowController;
   late final Animation<double> _floatAnimation;
-
-  // Embedded base64 data URI of the GLB. Loading it this way (instead of the
-  // plugin's loopback HTTP proxy) guarantees the 3D model renders fully
-  // offline with zero network dependency.
-  String? _modelDataUri;
+  late final Animation<double> _glowAnimation;
 
   @override
   void initState() {
@@ -663,27 +806,19 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
     _floatAnimation = Tween<double>(begin: -8, end: 8).animate(
       CurvedAnimation(parent: _floatController, curve: Curves.easeInOutSine),
     );
-    _loadModelOffline();
-  }
-
-  /// Read the bundled GLB and embed it as a base64 data URI so the model is
-  /// served directly to the `model-viewer` element with no network/proxy call.
-  Future<void> _loadModelOffline() async {
-    try {
-      final ByteData bytes = await rootBundle.load('assets/models/car.glb');
-      final String b64 = base64Encode(bytes.buffer.asUint8List());
-      if (mounted) {
-        setState(() => _modelDataUri = 'data:model/gltf-binary;base64,$b64');
-      }
-    } catch (_) {
-      // If embedding fails, fall back to the standard asset path.
-      if (mounted) setState(() => _modelDataUri = 'assets/models/car.glb');
-    }
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+    _glowAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOutSine),
+    );
   }
 
   @override
   void dispose() {
     _floatController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
@@ -695,59 +830,178 @@ class _RotatingCar3DState extends State<_RotatingCar3D>
       child: SizedBox(
         height: 180,
         width: double.infinity,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Soft glow behind the model
-            Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [Color(0x3391E0C0), Color(0x00000000)],
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_floatAnimation, _glowAnimation]),
+          builder: (context, child) {
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                // Glow ring behind the car
+                Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF4CC3FF).withValues(alpha: 0.15 * _glowAnimation.value),
+                        const Color(0x00000000),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            // Floating + continuously rotating model
-            AnimatedBuilder(
-              animation: _floatAnimation,
-              builder: (context, child) {
-                return Transform.translate(
+                // Car silhouette painted with premium gradient
+                Transform.translate(
                   offset: Offset(0, _floatAnimation.value),
-                  child: child,
-                );
-              },
-              child: ClipRRect(
-                child: _modelDataUri == null
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          semanticsLabel: 'Loading 3D Model',
-                        ),
-                      )
-                    : ModelViewer(
-                        src: _modelDataUri!,
-                        alt: 'Rotating 3D Car Model',
-                        ar: false,
-                        autoRotate: true,
-                        autoRotateDelay: 0,
-                        rotationPerSecond: '24deg',
-                        cameraControls: false,
-                        disableZoom: true,
-                        disablePan: true,
-                        disableTap: true,
-                        exposure: 1.1,
-                        environmentImage: 'neutral',
-                        shadowIntensity: 0.5,
-                        shadowSoftness: 1,
-                        backgroundColor: const Color(0x00000000),
-                      ),
-              ),
-            ),
-          ],
+                  child: SizedBox(
+                    width: 140,
+                    height: 70,
+                    child: CustomPaint(
+                      painter: _PremiumCarPainter(glowIntensity: _glowAnimation.value),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
+  }
+}
+
+/// Custom painter that draws a premium car silhouette with gradient fill,
+/// glowing headlights, tail lights, and windshield detail.
+class _PremiumCarPainter extends CustomPainter {
+  final double glowIntensity;
+
+  _PremiumCarPainter({required this.glowIntensity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF4CC3FF), Color(0xFF9B8CFF)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+
+    final glowPaint = Paint()
+      ..color = const Color(0xFF4CC3FF).withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+
+    final bodyPath = Path();
+    // Car body silhouette drawn with cubic bezier curves for a sleek shape
+    // Roof
+    bodyPath.moveTo(size.width * 0.2, size.height * 0.35);
+    bodyPath.cubicTo(
+      size.width * 0.25, size.height * 0.05,
+      size.width * 0.55, size.height * 0.05,
+      size.width * 0.6, size.height * 0.35,
+    );
+    // Rear window slope
+    bodyPath.cubicTo(
+      size.width * 0.65, size.height * 0.35,
+      size.width * 0.85, size.height * 0.3,
+      size.width * 0.9, size.height * 0.55,
+    );
+    // Rear bumper
+    bodyPath.cubicTo(
+      size.width * 0.95, size.height * 0.6,
+      size.width * 0.92, size.height * 0.75,
+      size.width * 0.85, size.height * 0.75,
+    );
+    // Rear wheel well
+    bodyPath.lineTo(size.width * 0.72, size.height * 0.75);
+    bodyPath.cubicTo(
+      size.width * 0.7, size.height * 0.85,
+      size.width * 0.6, size.height * 0.85,
+      size.width * 0.58, size.height * 0.75,
+    );
+    // Bottom middle
+    bodyPath.lineTo(size.width * 0.38, size.height * 0.75);
+    // Front wheel well
+    bodyPath.cubicTo(
+      size.width * 0.36, size.height * 0.85,
+      size.width * 0.26, size.height * 0.85,
+      size.width * 0.24, size.height * 0.75,
+    );
+    // Front bumper
+    bodyPath.lineTo(size.width * 0.15, size.height * 0.75);
+    bodyPath.cubicTo(
+      size.width * 0.08, size.height * 0.75,
+      size.width * 0.05, size.height * 0.6,
+      size.width * 0.1, size.height * 0.55,
+    );
+    // Hood slope
+    bodyPath.cubicTo(
+      size.width * 0.12, size.height * 0.5,
+      size.width * 0.15, size.height * 0.4,
+      size.width * 0.2, size.height * 0.35,
+    );
+    bodyPath.close();
+
+    // Draw glow behind the car body
+    canvas.drawPath(bodyPath, glowPaint);
+
+    // Draw car body
+    canvas.drawPath(bodyPath, paint);
+
+    // Windshield detail
+    final windshieldPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.2)
+      ..style = PaintingStyle.fill;
+
+    final windshieldPath = Path();
+    windshieldPath.moveTo(size.width * 0.22, size.height * 0.38);
+    windshieldPath.lineTo(size.width * 0.28, size.height * 0.25);
+    windshieldPath.lineTo(size.width * 0.5, size.height * 0.25);
+    windshieldPath.lineTo(size.width * 0.55, size.height * 0.38);
+    windshieldPath.close();
+    canvas.drawPath(windshieldPath, windshieldPaint);
+
+    // Front headlight glow
+    final headlightPaint = Paint()
+      ..color = const Color(0xFFFFD700).withValues(alpha: 0.6 * glowIntensity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(
+      Offset(size.width * 0.1, size.height * 0.6),
+      4 + glowIntensity * 2,
+      headlightPaint,
+    );
+
+    // Rear tail light
+    final tailLightPaint = Paint()
+      ..color = const Color(0xFFFF4444).withValues(alpha: 0.6 * glowIntensity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawCircle(
+      Offset(size.width * 0.88, size.height * 0.6),
+      3 + glowIntensity * 1.5,
+      tailLightPaint,
+    );
+
+    // Wheel indicators
+    final wheelPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawCircle(
+      Offset(size.width * 0.3, size.height * 0.78),
+      size.height * 0.07,
+      wheelPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.65, size.height * 0.78),
+      size.height * 0.07,
+      wheelPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PremiumCarPainter oldDelegate) {
+    return oldDelegate.glowIntensity != glowIntensity;
   }
 }
 
@@ -1202,28 +1456,48 @@ class _CarMapState extends State<_CarMap> {
             onTap: (tapPosition, point) => widget.onMapTap?.call(point),
           ),
           children: [
+            // Premium dark tile layer using CartoDB dark style
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              urlTemplate: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
               userAgentPackageName: 'com.carapp.launcher',
               tileProvider: CachedTileProvider(),
+              additionalOptions: const {'noRetina': 'false'},
             ),
-            if (widget.routePoints.isNotEmpty)
+            // Glowing route line with shadow underneath for premium look
+            if (widget.routePoints.isNotEmpty) ...[
+              // Glow layer (thicker, semi-transparent)
               PolylineLayer(polylines: [
-                Polyline(points: widget.routePoints, color: const Color(0xFF4CC3FF), strokeWidth: 5),
+                Polyline(
+                  points: widget.routePoints,
+                  color: const Color(0xFF4CC3FF).withValues(alpha: 0.3),
+                  strokeWidth: 12,
+                ),
               ]),
+              // Main route line
+              PolylineLayer(polylines: [
+                Polyline(
+                  points: widget.routePoints,
+                  color: const Color(0xFF4CC3FF),
+                  strokeWidth: 4,
+                ),
+              ]),
+            ],
             if (widget.locationReady)
               MarkerLayer(markers: [
+                // Premium animated location marker with pulse ring
                 Marker(
                   point: widget.center,
-                  width: 44,
-                  height: 44,
-                  child: Transform.rotate(
-                    angle: -pi / 4,
-                    child: const Icon(Icons.navigation, color: Color(0xFF4CC3FF), size: 44),
-                  ),
+                  width: 80,
+                  height: 80,
+                  child: _PremiumLocationMarker(heading: widget.heading),
                 ),
                 if (widget.destination != null)
-                  Marker(point: widget.destination!, width: 38, height: 38, child: const Icon(Icons.location_on, color: Color(0xFFFF5252), size: 38)),
+                  Marker(
+                    point: widget.destination!,
+                    width: 48,
+                    height: 48,
+                    child: _DestinationMarker(),
+                  ),
               ]),
           ],
         ),
