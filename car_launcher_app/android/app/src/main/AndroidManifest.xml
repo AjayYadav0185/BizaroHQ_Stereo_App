@@ -2,36 +2,53 @@
     package="com.example.car_launcher_app">
 
     <!--
-    BizaroHQ Stereo - Production Configuration
-    ============================================
-
-    This manifest configures the app as a system home launcher for
-    Android car head units with landscape orientation.
+    BizaroHQ Stereo - Production Configuration for TopWay TS7
+    ==========================================================
+    Device: TopWay TS7 (Unisoc SC7731E ARMv7)
+    Android: 8.1/9 (API 26-28)
+    Audio IC: PT2313
+    Bluetooth: 5.0 BLE
+    Storage: 32GB
     -->
 
-    <!-- Internet permission for WebView (FASTag integration) -->
+    <!-- Internet permission for map tiles and routing -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Bluetooth Classic (A2DP) for media streaming -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <!-- BLUETOOTH_CONNECT and BLUETOOTH_SCAN are only available on API 31+ (Android 12+).
-         Using maxSdkVersion="32" ensures they don't cause install issues on Android 8-10 (API 26-30).
-         On older devices, the app uses the traditional BLUETOOTH permission instead. -->
+         On TopWay TS7 (API 26-28), the traditional BLUETOOTH permission is used instead. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:maxSdkVersion="32" />
+
+    <!-- Bluetooth 5.0 BLE support for TopWay TS7 -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
+
+    <!-- Location permissions for GPS navigation -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- System permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- Required for WebView on Android 8-10 to properly render 3D models -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- PT2313 Audio IC - I2C control permissions -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <application
         android:label="BizaroHQ Stereo"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:largeHeap="true"
+        android:supportsRtl="false">
 
         <activity
             android:name=".MainActivity"
@@ -60,6 +77,24 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
         </activity>
+
+        <!-- PT2313 Audio IC Service - I2C communication for tone/volume control -->
+        <service
+            android:name=".PT2313AudioService"
+            android:exported="false"
+            android:enabled="true" />
+
+        <!-- Bluetooth LE scanning service for BLE 5.0 -->
+        <service
+            android:name=".BluetoothLeService"
+            android:exported="false"
+            android:enabled="true" />
+
+        <!-- Bluetooth A2DP Media Service - dedicated BT media control -->
+        <service
+            android:name=".BluetoothMediaService"
+            android:exported="false"
+            android:enabled="true" />
 
         <meta-data
             android:name="flutterEmbedding"

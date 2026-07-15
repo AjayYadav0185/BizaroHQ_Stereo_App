@@ -18,8 +18,7 @@ android {
     defaultConfig {
         applicationId = "com.example.car_launcher_app"
         // minSdk 24 = Android 7.0. Covers Android 8 (API 26), 9 (API 28), 10 (API 29).
-        // model_viewer_plus requires WebView which is available from API 21+, but
-        // we target API 24+ for broader plugin compatibility.
+        // TopWay TS7 with SC7731E runs Android 8.1/9 - API 26-28
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -28,6 +27,19 @@ android {
         // Required for model_viewer_plus WebView rendering on Android 8-10
         // Enables multi-dex for older devices that need it
         multiDexEnabled = true
+
+        // CRITICAL: TopWay TS7 uses ARMv7 (32-bit) Unisoc SC7731E
+        // Must build for armeabi-v7a to ensure native libraries work
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+    }
+
+    // Ensure we target ARMv7 specifically for SC7731E compatibility
+    splits {
+        abi {
+            isUniversalApk = true
+        }
     }
 
     buildTypes {
@@ -35,6 +47,19 @@ android {
             // Add your own signing config for production builds
             // Signing with debug keys for development
             signingConfig = signingConfigs.getByName("debug")
+            // Enable minification for smaller APK size on 32GB storage
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    // Packaging options for native libraries
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 }

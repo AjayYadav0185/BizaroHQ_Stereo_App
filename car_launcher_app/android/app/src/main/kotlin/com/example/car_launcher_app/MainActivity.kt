@@ -4,12 +4,14 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
@@ -21,60 +23,131 @@ import io.flutter.plugin.common.MethodChannel
 /**
  * Native Android host for the Flutter BizaroHQ Stereo.
  *
- * Production-ready implementation for Android head units (API 24+ / Android 7+).
+ * Production-ready implementation for TopWay TS7 head unit (API 26-28 / Android 8-9).
+ * Unisoc SC7731E ARMv7 processor, PT2313 Audio IC, Bluetooth 5.0 BLE.
  *
  * Key Features:
  * - singleInstance mode for seamless home launcher behavior
  * - MethodChannel intercepts Flutter triggers and dispatches media commands
  * - Explicitly abandons audio focus to never interrupt Bluetooth playback
  * - Targets the active Bluetooth (A2DP) media session directly via MediaSessionManager
- *   so the hardware-style buttons reliably control Spotify / YouTube Music / etc.
- *   playing on the connected car stereo, with AudioManager fallback.
- * - Synchronous Bluetooth A2DP connection detection (fixes async getProfileProxy bug)
+ * - PT2313 Audio IC control (volume, bass, treble, balance, fader, mute, input)
+ * - Bluetooth 5.0 BLE scanning and connectivity
+ * - Dedicated Bluetooth A2DP Media Service with real-time track monitoring
+ * - Synchronous Bluetooth A2DP connection detection
  * - Proper API level guards for Android 8-10 (API 26-30) compatibility
  *
- * The MethodChannel 'com.carapp.media/control' handles:
- * - mediaPrevious: Skip to previous track
- * - mediaToggle: Play/Pause toggle
- * - mediaNext: Skip to next track
- * - mediaVolumeUp: Increase device/media volume by one step
- * - mediaVolumeDown: Decrease device/media volume by one step
- * - getNowPlaying: Returns the current track title/artist from the active media session
- * - isBluetoothConnected: Returns true if a Bluetooth A2DP audio device is connected
+ * MethodChannel 'com.carapp.btmedia/control' handles ALL Bluetooth A2DP media:
+ * - bt_isConnected: Check if A2DP device is connected
+ * - bt_getDeviceName: Get connected device name
+ * - bt_getDeviceAddress: Get connected device address
+ * - bt_getTrackTitle: Get current track title
+ * - bt_getTrackArtist: Get current track artist
+ * - bt_isPlaying: Check if media is currently playing
+ * - bt_getActivePackage: Get active media player package name
+ * - bt_playPause: Toggle play/pause
+ * - bt_next: Skip to next track
+ * - bt_previous: Skip to previous track
+ * - bt_volumeUp: Raise volume
+ * - bt_volumeDown: Lower volume
+ *
+ * MethodChannel 'com.carapp.audio/pt2313' handles PT2313 hardware audio IC
+ * MethodChannel 'com.carapp.ble/control' handles BLE 5.0
  */
 class MainActivity : FlutterActivity() {
 
-    private val channelName = "com.carapp.media/control"
+    private val btMediaChannelName = "com.carapp.btmedia/control"
+    private val pt2313ChannelName = "com.carapp.audio/pt2313"
+    private val bleChannelName = "com.carapp.ble/control"
 
     companion object {
         private const val BT_PERMISSION_REQUEST_CODE = 1001
+        private const val TAG = "BizaroHQ"
     }
 
-    // Hardware media key codes for universal media control.
-    private val KEYCODE_MEDIA_PLAY_PAUSE = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-    private val KEYCODE_MEDIA_NEXT = KeyEvent.KEYCODE_MEDIA_NEXT
-    private val KEYCODE_MEDIA_PREVIOUS = KeyEvent.KEYCODE_MEDIA_PREVIOUS
+    // PT2313 Audio service instance
+    private var pt2313Service: PT2313AudioService? = null
+
+    // BLE service instance
+    private var bleService: BluetoothLeService? = null
+
+    // Bluetooth A2DP media service - dedicated BT media controller
+    private var btMediaService: BluetoothMediaService? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Abandon audio focus to prevent interrupting Bluetooth playback.
-        // This is called before any audio could be requested.
+        // Abandon audio focus to prevent interrupting Bluetooth playback
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         audioManager.abandonAudioFocus(null)
 
-        // On Android 12+ (API 31+) BLUETOOTH_CONNECT is a dangerous runtime
-        // permission and MUST be granted at runtime, not just declared in the
-        // manifest. Request it so the media card can read the A2DP state
-        // without throwing a fatal SecurityException.
-        // On Android 8-10 (API 26-30) this permission is not needed at runtime.
+        // Initialize PT2313 Audio IC service
+        initPT2313Audio()
+
+        // Initialize Bluetooth 5.0 BLE service
+        initBluetoothLE()
+
+        // Initialize dedicated Bluetooth A2DP Media Service
+        initBluetoothMedia()
+
+        // Request Bluetooth permission (Android 12+)
         requestBluetoothPermission()
+
+        Log.d(TAG, "=== BizaroHQ Stereo initialized for TopWay TS7 ===")
+        Log.d(TAG, "PT2313 Audio IC: ${if (pt2313Service != null) "OK" else "FAILED"}")
+        Log.d(TAG, "Bluetooth 5.0 BLE: ${if (bleService != null) "OK" else "FAILED"}")
+        Log.d(TAG, "Bluetooth A2DP Media: ${if (btMediaService != null) "OK" else "FAILED"}")
+    }
+
+    private fun initPT2313Audio() {
+        try {
+            pt2313Service = PT2313AudioService()
+            pt2313Service?.onCreate()
+        } catch (e: Exception) {
+            Log.e(TAG, "PT2313 init failed: ${e.message}")
+            pt2313Service = null
+        }
+    }
+
+    private fun initBluetoothLE() {
+        try {
+            bleService = BluetoothLeService()
+            bleService?.onCreate()
+            val bleIntent = Intent(this, BluetoothLeService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(bleIntent)
+            } else {
+                startService(bleIntent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "BLE init failed: ${e.message}")
+            bleService = null
+        }
     }
 
     /**
-     * Returns true if we are allowed to access Bluetooth connection info.
-     * On Android 8-10 (API < 31) the permission is not required at runtime.
+     * Initialize the dedicated Bluetooth A2DP Media Service.
+     * This service handles all Bluetooth media interactions:
+     * - Real-time A2DP connection monitoring via BroadcastReceiver
+     * - Active media session polling for now-playing track info
+     * - Transport controls (play/pause/next/prev) routed to A2DP
      */
+    private fun initBluetoothMedia() {
+        try {
+            btMediaService = BluetoothMediaService()
+            btMediaService?.onCreate()
+            val btIntent = Intent(this, BluetoothMediaService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(btIntent)
+            } else {
+                startService(btIntent)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "BT Media init failed: ${e.message}")
+            btMediaService = null
+        }
+    }
+
     private fun hasBluetoothConnectPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         return ContextCompat.checkSelfPermission(
@@ -100,238 +173,176 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        // No action needed; the media card simply polls state on a timer and
-        // will reflect the connection once (if) the permission is granted.
     }
 
     /**
-     * configureFlutterEngine: Set up MethodChannel for media control communication.
+     * configureFlutterEngine: Set up MethodChannels for BT media, PT2313, and BLE control.
      */
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-        val sessionManager =
-            getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        // ---- BLUETOOTH A2DP MEDIA CONTROL CHANNEL (Primary BT media control) ----
+        // All Bluetooth media playback commands go through this dedicated channel.
+        // The BluetoothMediaService handles real-time A2DP connection monitoring,
+        // now-playing track polling, and transport controls.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, btMediaChannelName)
             .setMethodCallHandler { call, result ->
                 try {
                     when (call.method) {
-                        "mediaPrevious" -> {
-                            dispatchMediaAction(sessionManager, audioManager, KEYCODE_MEDIA_PREVIOUS) {
-                                it.transportControls.skipToPrevious()
-                            }
-                            result.success(null)
+                        // Connection state
+                        "bt_isConnected" -> {
+                            result.success(btMediaService?.isBluetoothConnected() ?: false)
                         }
-                        "mediaToggle" -> {
-                            dispatchMediaAction(sessionManager, audioManager, KEYCODE_MEDIA_PLAY_PAUSE) {
-                                // TransportControls has no playPause() method;
-                                // emulate the hardware key which toggles play/pause
-                                // on the active media session.
-                                dispatchMediaKeyEvent(audioManager, KEYCODE_MEDIA_PLAY_PAUSE)
-                            }
-                            result.success(null)
+                        "bt_getDeviceName" -> {
+                            result.success(btMediaService?.getConnectedDeviceName() ?: "")
                         }
-                        "mediaNext" -> {
-                            dispatchMediaAction(sessionManager, audioManager, KEYCODE_MEDIA_NEXT) {
-                                it.transportControls.skipToNext()
-                            }
-                            result.success(null)
+                        "bt_getDeviceAddress" -> {
+                            result.success(btMediaService?.getConnectedDeviceAddress() ?: "")
                         }
-                        "mediaVolumeUp" -> {
-                            dispatchVolumeKey(audioManager, KeyEvent.KEYCODE_VOLUME_UP)
-                            result.success(null)
+
+                        // Now-playing metadata
+                        "bt_getTrackTitle" -> {
+                            result.success(btMediaService?.getCurrentTitle() ?: "")
                         }
-                        "mediaVolumeDown" -> {
-                            dispatchVolumeKey(audioManager, KeyEvent.KEYCODE_VOLUME_DOWN)
-                            result.success(null)
+                        "bt_getTrackArtist" -> {
+                            result.success(btMediaService?.getCurrentArtist() ?: "")
                         }
-                        "getNowPlaying" -> {
-                            result.success(getNowPlaying(sessionManager))
+                        "bt_isPlaying" -> {
+                            result.success(btMediaService?.isMediaPlaying() ?: false)
                         }
-                        "isBluetoothConnected" -> {
-                            result.success(isBluetoothA2dpConnected())
+                        "bt_getActivePackage" -> {
+                            result.success(btMediaService?.getActivePackageName() ?: "")
                         }
-                        "requestBluetoothPermission" -> {
-                            requestBluetoothPermission()
-                            result.success(hasBluetoothConnectPermission())
+
+                        // Transport controls - routed to A2DP via MediaService
+                        "bt_playPause" -> {
+                            btMediaService?.togglePlayPause()
+                            result.success(true)
+                        }
+                        "bt_next" -> {
+                            btMediaService?.nextTrack()
+                            result.success(true)
+                        }
+                        "bt_previous" -> {
+                            btMediaService?.previousTrack()
+                            result.success(true)
+                        }
+
+                        // Volume control - routed to A2DP audio stream
+                        "bt_volumeUp" -> {
+                            btMediaService?.adjustVolume(true)
+                            result.success(true)
+                        }
+                        "bt_volumeDown" -> {
+                            btMediaService?.adjustVolume(false)
+                            result.success(true)
+                        }
+
+                        else -> result.notImplemented()
+                    }
+                } catch (t: Throwable) {
+                    result.error("BT_MEDIA_ERROR", t.message, null)
+                }
+            }
+
+        // ---- PT2313 AUDIO IC CHANNEL ----
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pt2313ChannelName)
+            .setMethodCallHandler { call, result ->
+                if (pt2313Service == null) {
+                    result.error("PT2313_ERROR", "PT2313 Audio IC not available", null)
+                    return@setMethodCallHandler
+                }
+
+                try {
+                    when (call.method) {
+                        "pt2313_setVolume" -> {
+                            val volume = call.argument<Int>("volume") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "volume required", null)
+                            pt2313Service?.setVolume(volume)
+                            result.success(true)
+                        }
+                        "pt2313_getVolume" -> result.success(pt2313Service?.getVolume() ?: 0)
+                        "pt2313_setMute" -> {
+                            val mute = call.argument<Boolean>("mute") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "mute required", null)
+                            pt2313Service?.setMute(mute)
+                            result.success(true)
+                        }
+                        "pt2313_isMuted" -> result.success(pt2313Service?.isMuted() ?: false)
+                        "pt2313_setBass" -> {
+                            val bass = call.argument<Int>("bass") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "bass required", null)
+                            result.success(pt2313Service?.setBass(bass) ?: false)
+                        }
+                        "pt2313_getBass" -> result.success(pt2313Service?.getBass() ?: 8)
+                        "pt2313_setTreble" -> {
+                            val treble = call.argument<Int>("treble") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "treble required", null)
+                            result.success(pt2313Service?.setTreble(treble) ?: false)
+                        }
+                        "pt2313_getTreble" -> result.success(pt2313Service?.getTreble() ?: 8)
+                        "pt2313_setBalance" -> {
+                            val balance = call.argument<Int>("balance") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "balance required", null)
+                            result.success(pt2313Service?.setBalance(balance) ?: false)
+                        }
+                        "pt2313_getBalance" -> result.success(pt2313Service?.getBalance() ?: 0)
+                        "pt2313_setFader" -> {
+                            val fader = call.argument<Int>("fader") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "fader required", null)
+                            result.success(pt2313Service?.setFader(fader) ?: false)
+                        }
+                        "pt2313_getFader" -> result.success(pt2313Service?.getFader() ?: 0)
+                        "pt2313_setInputSource" -> {
+                            val source = call.argument<Int>("source") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "source required", null)
+                            result.success(pt2313Service?.setInputSource(source) ?: false)
+                        }
+                        "pt2313_getInputSource" -> result.success(pt2313Service?.getInputSource() ?: 0)
+                        "pt2313_getInputSourceNames" -> result.success(pt2313Service?.getInputSourceNames() ?: emptyMap<Int, String>())
+                        "pt2313_reset" -> {
+                            pt2313Service?.resetToDefaults()
+                            result.success(true)
                         }
                         else -> result.notImplemented()
                     }
                 } catch (t: Throwable) {
-                    result.error("MEDIA_ERROR", t.message, null)
+                    result.error("PT2313_ERROR", t.message, null)
                 }
             }
-    }
 
-    /**
-     * Resolves the active Bluetooth (or foreground) media session and performs the
-     * requested [action] on its [MediaController.TransportControls].
-     *
-     * If no suitable media session is found (e.g. nothing is playing yet), it
-     * falls back to dispatching a raw hardware media key event through the
-     * [AudioManager] so the press still reaches the default active player.
-     */
-    private fun dispatchMediaAction(
-        sessionManager: MediaSessionManager,
-        audioManager: AudioManager,
-        keyCode: Int,
-        action: (MediaController) -> Unit
-    ) {
-        if (!hasBluetoothConnectPermission()) {
-            // No permission: fall back to a raw hardware key event so the press
-            // still reaches the default active player without crashing.
-            dispatchMediaKeyEvent(audioManager, keyCode)
-            return
-        }
-        val controllers = sessionManager.getActiveSessions(null)
-        // Prefer a controller whose package looks like a Bluetooth / remote player;
-        // otherwise use the first active controller if any.
-        val target = controllers.firstOrNull { isLikelyBluetooth(it) } ?: controllers.firstOrNull()
+        // ---- BLUETOOTH LE CHANNEL ----
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, bleChannelName)
+            .setMethodCallHandler { call, result ->
+                if (bleService == null) {
+                    result.error("BLE_ERROR", "Bluetooth LE not available", null)
+                    return@setMethodCallHandler
+                }
 
-        if (target != null) {
-            action(target)
-        } else {
-            // Fallback: emulate a hardware key press on the system media session.
-            dispatchMediaKeyEvent(audioManager, keyCode)
-        }
-    }
-
-    /**
-     * Heuristic to detect a Bluetooth / remote media session.
-     *
-     * Bluetooth A2DP players normally expose a package name containing common
-     * streaming/BT identifiers, or report a non-empty package that is not this
-     * launcher. We treat any external, non-launcher package as a candidate.
-     */
-    private fun isLikelyBluetooth(controller: MediaController): Boolean {
-        val pkg = controller.packageName ?: return false
-        if (pkg == packageName) return false
-        return pkg.contains("bluetooth", ignoreCase = true) ||
-                pkg.contains("a2dp", ignoreCase = true) ||
-                pkg.contains("spotify", ignoreCase = true) ||
-                pkg.contains("youtube", ignoreCase = true) ||
-                pkg.contains("music", ignoreCase = true) ||
-                pkg.contains("media", ignoreCase = true) ||
-                pkg.contains("android", ignoreCase = true)
-    }
-
-    /**
-     * Returns true when a Bluetooth A2DP (audio) device is currently connected.
-     *
-     * FIXED: Uses synchronous getProfileConnectionState() instead of the broken
-     * async getProfileProxy() approach. getProfileConnectionState() is available
-     * from API 14+ (Android 4.0+) and returns the connection state immediately.
-     *
-     * For Android 8-10 (API 26-30): BLUETOOTH_CONNECT permission is not required,
-     * so this works without runtime permission grants.
-     */
-    private fun isBluetoothA2dpConnected(): Boolean {
-        if (!hasBluetoothConnectPermission()) return false
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
-        if (!adapter.isEnabled) return false
-        return try {
-            // Synchronous check - works on API 14+ (all supported Android versions)
-            val state = adapter.getProfileConnectionState(BluetoothProfile.A2DP)
-            state == BluetoothProfile.STATE_CONNECTED
-        } catch (_: Throwable) {
-            // Fallback: try the async method for edge cases
-            fallbackBluetoothCheck()
-        }
-    }
-
-    /**
-     * Fallback Bluetooth check using the async profile proxy approach.
-     * This is only reached if the synchronous method throws an exception.
-     */
-    private fun fallbackBluetoothCheck(): Boolean {
-        return try {
-            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
-            if (!adapter.isEnabled) return false
-            var connected = false
-            val latch = java.util.concurrent.CountDownLatch(1)
-            val profileListener = object : BluetoothProfile.ServiceListener {
-                override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                    if (profile == BluetoothProfile.A2DP) {
-                        connected = proxy.connectedDevices.isNotEmpty()
+                try {
+                    when (call.method) {
+                        "ble_isSupported" -> result.success(bleService?.isBLESupported() ?: false)
+                        "ble_isEnabled" -> result.success(bleService?.isBluetoothEnabled() ?: false)
+                        "ble_startScan" -> result.success(bleService?.startScanning() ?: false)
+                        "ble_stopScan" -> {
+                            bleService?.stopScanning()
+                            result.success(true)
+                        }
+                        "ble_isScanning" -> result.success(bleService?.isScanning() ?: false)
+                        "ble_connect" -> {
+                            val address = call.argument<String>("address") ?: return@setMethodCallHandler result.error("INVALID_ARGS", "address required", null)
+                            val autoConnect = call.argument<Boolean>("autoConnect") ?: false
+                            result.success(bleService?.connect(address, autoConnect) ?: false)
+                        }
+                        "ble_disconnect" -> {
+                            bleService?.disconnect()
+                            result.success(true)
+                        }
+                        "ble_getConnectedDevices" -> {
+                            val devices = bleService?.getConnectedDevices()?.map {
+                                mapOf("address" to it.address, "name" to (it.name ?: "Unknown"))
+                            } ?: emptyList()
+                            result.success(devices)
+                        }
+                        "ble_getDiscoveredDevices" -> result.success(bleService?.getDiscoveredDevices()?.toList() ?: emptyList<String>())
+                        else -> result.notImplemented()
                     }
-                    latch.countDown()
-                }
-
-                override fun onServiceDisconnected(profile: Int) {
-                    latch.countDown()
+                } catch (t: Throwable) {
+                    result.error("BLE_ERROR", t.message, null)
                 }
             }
-            adapter.getProfileProxy(this, profileListener, BluetoothProfile.A2DP)
-            // Wait up to 2 seconds for the async callback
-            latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
-            connected
-        } catch (_: Throwable) {
-            false
-        }
-    }
-
-    /**
-     * Dispatches a standard media hardware key event to the system.
-     *
-     * Uses AudioManager.dispatchMediaKeyEvent which routes to the current
-     * active media session (e.g., Bluetooth A2DP player like Spotify).
-     *
-     * This method sends both KEY_DOWN and KEY_UP events to properly emulate
-     * hardware media button presses.
-     *
-     * IMPORTANT: We do NOT request audio focus before dispatching, ensuring
-     * background music continues uninterrupted.
-     *
-     * @param audioManager System AudioManager service
-     * @param keyCode The Android KeyEvent keycode for the media action
-     */
-    private fun dispatchMediaKeyEvent(audioManager: AudioManager, keyCode: Int) {
-        // Send both down and up events to emulate hardware button press.
-        val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
-        val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
-        audioManager.dispatchMediaKeyEvent(downEvent)
-        audioManager.dispatchMediaKeyEvent(upEvent)
-    }
-
-    /**
-     * Adjusts the device (media) volume by one step, exactly like pressing the
-     * hardware volume rocker. This changes the volume of the active Bluetooth
-     * audio output. AUDIO_SERVICE stream is used with FLAG_SHOW_UI so the user
-     * sees the system volume indicator.
-     */
-    private fun dispatchVolumeKey(audioManager: AudioManager, keyCode: Int) {
-        val direction = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            AudioManager.ADJUST_RAISE
-        } else {
-            AudioManager.ADJUST_LOWER
-        }
-        audioManager.adjustStreamVolume(
-            AudioManager.STREAM_MUSIC,
-            direction,
-            AudioManager.FLAG_SHOW_UI
-        )
-    }
-
-    /**
-     * Reads the current track metadata (title/artist) from the active media
-     * session, preferring the Bluetooth/remote player. Returns a map that the
-     * Flutter UI uses for the scrolling "now playing" marquee.
-     *
-     * On Android 8-10 (API 26-30): Works without BLUETOOTH_CONNECT permission
-     * since MediaSessionManager.getActiveSessions() is available from API 21+.
-     */
-    private fun getNowPlaying(sessionManager: MediaSessionManager): Map<String, String> {
-        if (!hasBluetoothConnectPermission()) return mapOf("title" to "", "artist" to "")
-        val controllers = sessionManager.getActiveSessions(null)
-        val target = controllers.firstOrNull { isLikelyBluetooth(it) } ?: controllers.firstOrNull()
-        val meta = target?.metadata
-        val title = meta?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
-        val artist = meta?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
-        return mapOf(
-            "title" to (title ?: ""),
-            "artist" to (artist ?: "")
-        )
     }
 }
