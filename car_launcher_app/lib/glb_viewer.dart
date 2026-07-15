@@ -337,15 +337,19 @@ class _GLBViewerState extends State<GLBViewer>
           child: AnimatedBuilder(
             animation: Listenable.merge([_floatAnimation, _glowAnimation]),
             builder: (context, child) {
-              return CustomPaint(
-                size: Size.infinite,
-                painter: _GLBCarPainter(
-                  model: _model!,
-                  rotationAngle: _rotationAngle,
-                  floatOffset: _floatAnimation.value,
-                  glowIntensity: _glowAnimation.value,
-                  glowColor: widget.glowColor,
-                ),
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  return CustomPaint(
+                    size: Size(constraints.maxWidth, constraints.maxHeight),
+                    painter: _GLBCarPainter(
+                      model: _model!,
+                      rotationAngle: _rotationAngle,
+                      floatOffset: _floatAnimation.value,
+                      glowIntensity: _glowAnimation.value,
+                      glowColor: widget.glowColor,
+                    ),
+                  );
+                },
               );
             },
           ),

@@ -135,16 +135,26 @@
         </div>
 
         <h1>BizaroHQ Stereo</h1>
-        <p>Landscape BizaroHQ Stereo with live map, GPS speedometer, and Bluetooth media controls.</p>
+<p>Landscape BizaroHQ Stereo with live map, GPS speedometer, and Bluetooth media controls.</p>
 
-        <a href="apk/BizaroHQ_Stereo_v1.0.0.apk" class="download-btn" download id="downloadLink">
+        <a href="apk/BizaroHQ_Stereo_v2.1_arm64.apk" class="download-btn" download id="downloadLinkArm64">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"></path>
+                <path d="M21 15v4a2 2 0 1-2 2H5a2 2 0 1-2-2v4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            Download Stereo APK
+            Download APK (arm64)
+        </a>
+
+        <a href="apk/BizaroHQ_Stereo_v2.1_arm32.apk" class="download-btn" download id="downloadLinkArm32" style="margin-top: 12px; background-color: var(--card-bg); color: var(--text-main);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 1-2 2H5a2 2 0 1-2-2v4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download APK (arm32)
         </a>
 
         <div class="footer-note">
@@ -155,9 +165,10 @@
 
     <!--
       To update the APK:
-      1. Run: cd car_launcher_app && flutter build apk --release
-      2. Run: cp car_launcher_app/build/app/outputs/flutter-apk/app-release.apk apk/BizaroHQ_Stereo_v1.0.0.apk
-      3. Commit and push
+      1. Run: cd car_launcher_app && flutter build apk --release --split-per-abi
+      2. Copy arm64: cp car_launcher_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk apk/BizaroHQ_Stereo_v2.1_arm64.apk
+      3. Copy arm32: cp car_launcher_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk apk/BizaroHQ_Stereo_v2.1_arm32.apk
+      4. Commit and push
     -->
 </body>
 </html>

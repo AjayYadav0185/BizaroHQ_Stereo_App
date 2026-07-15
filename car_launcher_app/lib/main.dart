@@ -14,7 +14,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'media_channel.dart';
 import 'tile_cache.dart';
-import 'glb_viewer.dart';
+// import 'glb_viewer.dart';
 
 /// Premium BizaroHQ Stereo with animated UI.
 void main() {
@@ -204,7 +204,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          GLBViewer(assetPath: 'assets/models/car.glb', height: 180, glowColor: const Color(0xFF4CC3FF)),
+                          // Car section removed
                           const SizedBox(height: 16),
                           _GlassContainer(
                             tint: const Color(0xFF4CC3FF),
@@ -256,6 +256,7 @@ class _CarLauncherPageState extends State<CarLauncherPage> {
     );
   }
 }
+
 
 class _GlassContainer extends StatelessWidget {
   final Widget child;
